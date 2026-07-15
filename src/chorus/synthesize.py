@@ -48,8 +48,15 @@ def _cosine(a: dict[int, float], b: dict[int, float]) -> float:
     return sum(v * big.get(k, 0.0) for k, v in small.items())
 
 
-def cluster(scored: list[Scored], *, threshold: float = 0.18, dims: int = 512) -> list[list[Scored]]:
-    """Single-link connected components over hashed-TF-IDF cosine. Deterministic partition."""
+def cluster(scored: list[Scored], *, threshold: float = 0.30, dims: int = 512) -> list[list[Scored]]:
+    """Leader (greedy nearest-leader) clustering over hashed-TF-IDF cosine.
+
+    An item joins the existing leader it is MOST similar to (>= threshold), or starts a new
+    cluster. Unlike single-link connected components, membership requires similarity to a
+    cluster's LEADER, not a transitive chain of pairwise links, so large diverse corpora do not
+    collapse into one megacluster. Deterministic: leaders are seeded in (engagement desc, input
+    index) order, so the most-engaged comments anchor the themes; members keep input order.
+    """
     n = len(scored)
     if n == 0:
         return []
@@ -59,22 +66,21 @@ def cluster(scored: list[Scored], *, threshold: float = 0.18, dims: int = 512) -
             df[t] = df.get(t, 0) + 1
     idf = {t: math.log((n + 1) / (c + 1)) + 1.0 for t, c in df.items()}
     vecs = [_vector(s.item.text, idf, dims) for s in scored]
-    parent = list(range(n))
-
-    def find(x):
-        while parent[x] != x:
-            parent[x] = parent[parent[x]]
-            x = parent[x]
-        return x
-
-    for i in range(n):
-        for j in range(i + 1, n):
-            if _cosine(vecs[i], vecs[j]) >= threshold:
-                parent[find(i)] = find(j)
-    groups: dict[int, list[Scored]] = {}
-    for idx, s in enumerate(scored):        # input order preserved within a group
-        groups.setdefault(find(idx), []).append(s)
-    return list(groups.values())
+    order = sorted(range(n), key=lambda i: (-scored[i].item.engagement, i))
+    leaders: list[dict[int, float]] = []      # leader vectors, in creation order
+    members: list[list[int]] = []             # original indices per leader
+    for i in order:
+        best, best_sim = -1, threshold
+        for li, lvec in enumerate(leaders):
+            sim = _cosine(vecs[i], lvec)
+            if sim >= best_sim:
+                best, best_sim = li, sim
+        if best < 0:
+            leaders.append(vecs[i])
+            members.append([i])
+        else:
+            members[best].append(i)
+    return [[scored[i] for i in sorted(m)] for m in members]
 
 
 @dataclass(frozen=True)
