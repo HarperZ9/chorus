@@ -93,6 +93,14 @@ def _cmd_watch(args) -> int:
     return 0
 
 
+def _cmd_digests(args) -> int:
+    from chorus.daemon import DigestStore
+    store = DigestStore(args.store)
+    print(json.dumps({"store": args.store, "digests": store.recent(args.limit)},
+                     indent=2, ensure_ascii=False))
+    return 0
+
+
 def _cmd_daemon(args) -> int:
     import time
     from chorus.daemon import Watchlist, DigestStore, tick
@@ -142,5 +150,9 @@ def main(argv: list[str] | None = None) -> int:
     daemon.add_argument("--once", action="store_true", help="run a single tick and exit")
     daemon.add_argument("--interval", type=int, default=300, help="seconds between ticks")
     daemon.set_defaults(func=_cmd_daemon)
+    digests = sub.add_parser("digests", help="list recent digests the daemon has stored")
+    digests.add_argument("store", help="the daemon's digest store directory")
+    digests.add_argument("--limit", type=int, default=20)
+    digests.set_defaults(func=_cmd_digests)
     args = parser.parse_args(argv)
     return args.func(args)

@@ -98,3 +98,22 @@ def test_cli_watch_then_daemon_once_synthesizes(tmp_path, capsys):
     assert main(["daemon", "--once", "--watchlist", wl, "--store", store]) == 0
     out = json.loads(capsys.readouterr().out)
     assert out["ticked"] == 1 and out["results"][0]["status"] == "synthesized"
+
+
+def test_cli_digests_lists_recent_from_the_store(tmp_path, capsys):
+    from chorus.cli import main
+    corpus = _corpus(tmp_path, "a", "vidA", 6)
+    wl = str(tmp_path / "watch.json")
+    store = str(tmp_path / "store")
+    main(["watch", "add", corpus, "--watchlist", wl])
+    main(["daemon", "--once", "--watchlist", wl, "--store", store])
+    capsys.readouterr()
+    assert main(["digests", store]) == 0
+    out = json.loads(capsys.readouterr().out)
+    assert out["digests"][0]["responds_to"] == "vidA"
+
+
+def test_cli_digests_on_empty_store_is_an_empty_list(tmp_path, capsys):
+    from chorus.cli import main
+    assert main(["digests", str(tmp_path / "empty-store")]) == 0
+    assert json.loads(capsys.readouterr().out)["digests"] == []
