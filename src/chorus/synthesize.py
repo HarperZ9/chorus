@@ -15,7 +15,7 @@ from dataclasses import dataclass
 
 from chorus.sentiment import Scored
 
-_WORD = re.compile(r"[a-z0-9']+")
+_WORD = re.compile(r"\w+", re.UNICODE)   # Unicode-aware so non-Latin corpora still form term vectors
 _STOP = set("the a an and or but of to in on for is are was were be been it this that "
             "i you he she they we my your with as at by from so not no".split())
 
@@ -29,7 +29,8 @@ def _terms(text: str) -> list[str]:
 
 
 def _bucket(term: str, dims: int) -> int:
-    return int(hashlib.md5(term.encode("utf-8")).hexdigest(), 16) % dims
+    # feature bucketing, not security; usedforsecurity=False keeps it working under FIPS mode.
+    return int(hashlib.md5(term.encode("utf-8"), usedforsecurity=False).hexdigest(), 16) % dims
 
 
 def _vector(text: str, idf: dict[str, float], dims: int) -> dict[int, float]:
@@ -48,7 +49,7 @@ def _cosine(a: dict[int, float], b: dict[int, float]) -> float:
     return sum(v * big.get(k, 0.0) for k, v in small.items())
 
 
-def cluster(scored: list[Scored], *, threshold: float = 0.30, dims: int = 512) -> list[list[Scored]]:
+def cluster(scored: list[Scored], *, threshold: float = 0.18, dims: int = 512) -> list[list[Scored]]:
     """Leader (greedy nearest-leader) clustering over hashed-TF-IDF cosine.
 
     An item joins the existing leader it is MOST similar to (>= threshold), or starts a new
@@ -135,16 +136,32 @@ def _build_theme(group, *, k, pos_cut, neg_cut) -> Theme:
     )
 
 
+_COARSENESS = ("lexicon sentiment is English-only and literal (no sarcasm, irony, or context); "
+               "clustering is lexical, not semantic. Sentiment is a weight, never a verdict.")
+
+
+def _responds_to(scored: list[Scored]) -> str:
+    targets = {s.item.responds_to for s in scored}
+    if not targets:
+        return ""
+    return next(iter(targets)) if len(targets) == 1 else "(mixed)"
+
+
 def synthesize(scored: list[Scored], *, k: float = 0.5, threshold: float = 0.18,
                dims: int = 512, pos_cut: float = 0.1, neg_cut: float = -0.1) -> Digest:
-    responds_to = scored[0].item.responds_to if scored else ""
     groups = cluster(scored, threshold=threshold, dims=dims)
     themes = [_build_theme(g, k=k, pos_cut=pos_cut, neg_cut=neg_cut) for g in groups]
     themes.sort(key=lambda t: t.weighted_score, reverse=True)
+    # Honest null surfaced in the digest itself: how many items actually carried an engagement
+    # signal, how many distinct targets, and the method's coarseness. All hashed into the receipt.
+    present = sum(1 for s in scored if s.item.meta.get("engagement_present"))
     digest = Digest(
-        responds_to=responds_to, n_items=len(scored), themes=tuple(themes),
+        responds_to=_responds_to(scored), n_items=len(scored), themes=tuple(themes),
         method={"weight_k": k, "cluster_threshold": threshold, "dims": dims,
-                "pos_cut": pos_cut, "neg_cut": neg_cut},
+                "pos_cut": pos_cut, "neg_cut": neg_cut,
+                "engagement_coverage": {"present": present, "total": len(scored)},
+                "distinct_targets": len({s.item.responds_to for s in scored}),
+                "coarseness": _COARSENESS},
     )
     from chorus.receipt import build_receipt
     return dataclasses.replace(digest, receipt=build_receipt(scored, digest))

@@ -5,7 +5,10 @@ import argparse
 import dataclasses
 import json
 import os
+import re
 import sys
+
+_SHA256 = re.compile(r"[0-9a-f]{64}")
 
 from chorus.item import normalize
 from chorus.sentiment import score
@@ -33,10 +36,11 @@ def _load_corpus_dir(path: str) -> list[dict]:
             if r.get("kind") != "comment":
                 continue
             sha = r.get("sha256", "")
-            obj = os.path.join(path, "objects", sha[:2], sha[2:])
-            if os.path.exists(obj):
-                with open(obj, encoding="utf-8") as of:
-                    r["text"] = of.read()
+            if _SHA256.fullmatch(sha):      # never build a read path from an unvalidated field
+                obj = os.path.join(path, "objects", sha[:2], sha[2:])
+                if os.path.exists(obj):
+                    with open(obj, encoding="utf-8") as of:
+                        r["text"] = of.read()
             rows.append(r)
     return rows
 
@@ -49,7 +53,14 @@ def _cmd_run(args) -> int:
     if not os.path.exists(args.path):
         print(f"chorus: not found: {args.path}", file=sys.stderr)
         return 1
-    rows = _load_rows(args.path)
+    try:
+        rows = _load_rows(args.path)
+    except (json.JSONDecodeError, OSError) as e:
+        print(f"chorus: could not read corpus {args.path}: {e}", file=sys.stderr)
+        return 1
+    if not isinstance(rows, list):
+        print("chorus: corpus JSON must be a list of rows", file=sys.stderr)
+        return 1
     scored = score(normalize(rows))
     digest = synthesize(scored)
     out = _digest_to_dict(digest)
@@ -60,6 +71,11 @@ def _cmd_run(args) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
+    # Emit UTF-8 regardless of the console/redirect codepage: a digest of real comments carries
+    # emoji and non-Latin text, which would crash a cp1252 stdout on Windows. Guarded because a
+    # capture stream (pytest capsys) has no reconfigure().
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8")
     parser = argparse.ArgumentParser(prog="chorus")
     sub = parser.add_subparsers(dest="command", required=True)
     run = sub.add_parser("run", help="synthesize a discourse digest from a corpus")
