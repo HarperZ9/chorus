@@ -42,7 +42,7 @@ def digest_body_sha(digest) -> str:
     return _sha([digest.responds_to, digest.n_items, digest.method, body])
 
 
-def build_receipt(scored: list[Scored], digest) -> DigestReceipt:
+def build_receipt(scored: list[Scored], digest, *, model_ref: str | None = None) -> DigestReceipt:
     m = digest.method
     return DigestReceipt(
         input_sha256=input_digest(scored),
@@ -50,7 +50,7 @@ def build_receipt(scored: list[Scored], digest) -> DigestReceipt:
         cluster_params={"threshold": m["cluster_threshold"], "dims": m["dims"],
                         "pos_cut": m["pos_cut"], "neg_cut": m["neg_cut"]},
         weight_formula={"expr": "log1p(engagement)*(1+k*abs(compound))", "k": m["weight_k"]},
-        model_ref=None,
+        model_ref=model_ref,
         digest_sha256=digest_body_sha(digest),
         method_version=METHOD_VERSION,
     )

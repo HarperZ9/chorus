@@ -84,3 +84,52 @@ def score(items: list[DiscourseItem]) -> list[Scored]:
         compound, firing = score_text(it.text)
         out.append(Scored(item=it, compound=compound, provenance="lexicon", evidence=firing))
     return out
+
+
+def _prompt_sha(text: str) -> str:
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()[:16]
+
+
+def model_pass(scored: list[Scored], model, *, model_ref: str,
+               ambiguous_cut: float = 0.1, top_k: int = 0) -> list[dict]:
+    """Route the lexicon-UNCERTAIN items through a model for a nuance read, as an advisory
+    provenance-tagged overlay. Selects items whose |lexicon compound| < ambiguous_cut (where the
+    literal lexicon is least sure -- sarcasm, irony, context), plus optionally the top_k by
+    engagement. ``model`` is a callable ``list[str] -> list[{compound, label}]``; a raising model
+    marks its items ``model-failed`` rather than crashing. The overlay never enters the digest core:
+    it is model opinion, listed with its own provenance and the prompt hash it read.
+    """
+    seen = set()
+    selected: list[Scored] = []
+    for s in scored:
+        if abs(s.compound) < ambiguous_cut and s.item.id not in seen:
+            seen.add(s.item.id)
+            selected.append(s)
+    if top_k:
+        for s in sorted(scored, key=lambda x: x.item.engagement, reverse=True)[:top_k]:
+            if s.item.id not in seen:
+                seen.add(s.item.id)
+                selected.append(s)
+    if not selected:
+        return []
+    prov = f"model:{model_ref}"
+    try:
+        results = model([s.item.text for s in selected])
+    except Exception as e:  # noqa: BLE001 - a model failure is named evidence, never a crash.
+        return [{"item_id": s.item.id, "lexicon_compound": s.compound, "model_compound": None,
+                 "label": f"model-failed: {type(e).__name__}", "provenance": prov,
+                 "prompt_sha": _prompt_sha(s.item.text)} for s in selected]
+    overlays = []
+    for i, s in enumerate(selected):
+        r = results[i] if i < len(results) and isinstance(results[i], dict) else None
+        if r is None:
+            overlays.append({"item_id": s.item.id, "lexicon_compound": s.compound,
+                             "model_compound": None, "label": "model-failed: no result",
+                             "provenance": prov, "prompt_sha": _prompt_sha(s.item.text)})
+            continue
+        mc = r.get("compound")
+        overlays.append({"item_id": s.item.id, "lexicon_compound": s.compound,
+                         "model_compound": float(mc) if isinstance(mc, (int, float)) else None,
+                         "label": str(r.get("label", "")), "provenance": prov,
+                         "prompt_sha": _prompt_sha(s.item.text)})
+    return overlays

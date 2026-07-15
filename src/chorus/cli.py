@@ -62,12 +62,30 @@ def _cmd_run(args) -> int:
         print("chorus: corpus JSON must be a list of rows", file=sys.stderr)
         return 1
     scored = score(normalize(rows))
-    digest = synthesize(scored)
+    model_scores, model_ref = _run_model_pass(args, scored)
+    digest = synthesize(scored, model_scores=model_scores, model_ref=model_ref)
     out = _digest_to_dict(digest)
     if args.verify:
         out["verified"] = verify_digest(digest, scored)
     print(json.dumps(out, indent=2, sort_keys=True, ensure_ascii=False))
     return 0
+
+
+def _run_model_pass(args, scored):
+    """Optionally overlay a model sentiment read on the lexicon-uncertain items. The model command
+    reads a JSON array of texts on stdin and emits ``[{compound, label}]``. Returns
+    (model_scores, model_ref), or (None, None) when no --model was given."""
+    cmd = getattr(args, "model", None)
+    if not cmd:
+        return None, None
+    import shlex
+    from chorus.model import SubprocessModel
+    from chorus.sentiment import model_pass
+    ref = getattr(args, "model_ref", None) or cmd
+    model = SubprocessModel(shlex.split(cmd), ref=ref)
+    overlays = model_pass(scored, model, model_ref=ref,
+                          ambiguous_cut=getattr(args, "ambiguous_cut", 0.1))
+    return overlays, ref
 
 
 def _cmd_corpora(args) -> int:
@@ -135,6 +153,11 @@ def main(argv: list[str] | None = None) -> int:
     run = sub.add_parser("run", help="synthesize a discourse digest from a corpus")
     run.add_argument("path", help="a JSON file of gather-style rows, or a gather corpus directory")
     run.add_argument("--verify", action="store_true", help="re-derive and confirm the receipt")
+    run.add_argument("--model", help="a command that reads texts (JSON) on stdin and emits "
+                                     "[{compound,label}]; overlays a model read on uncertain items")
+    run.add_argument("--model-ref", help="a name for the model, recorded in the receipt")
+    run.add_argument("--ambiguous-cut", type=float, default=0.1,
+                     help="|lexicon compound| below this is sent to the model (default 0.1)")
     run.set_defaults(func=_cmd_run)
     corpora = sub.add_parser("corpora", help="discover gather corpora under a root as discourse sources")
     corpora.add_argument("root", help="a directory to scan for gather corpora (dirs holding catalog.jsonl)")

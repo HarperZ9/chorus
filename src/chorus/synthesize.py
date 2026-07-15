@@ -103,6 +103,10 @@ class Digest:
     themes: tuple[Theme, ...]
     method: dict
     receipt: object = None    # DigestReceipt; set by synthesize()
+    # An optional model-sentiment overlay: advisory, provenance-tagged model opinion on the
+    # lexicon-uncertain items. Deliberately NOT part of digest_body_sha, so it never changes the
+    # re-checkable core; the receipt's model_ref names the model that produced it.
+    model_layer: tuple = ()
 
 
 def _label(group, top_terms):
@@ -148,7 +152,8 @@ def _responds_to(scored: list[Scored]) -> str:
 
 
 def synthesize(scored: list[Scored], *, k: float = 0.5, threshold: float = 0.18,
-               dims: int = 512, pos_cut: float = 0.1, neg_cut: float = -0.1) -> Digest:
+               dims: int = 512, pos_cut: float = 0.1, neg_cut: float = -0.1,
+               model_scores: list[dict] | None = None, model_ref: str | None = None) -> Digest:
     groups = cluster(scored, threshold=threshold, dims=dims)
     themes = [_build_theme(g, k=k, pos_cut=pos_cut, neg_cut=neg_cut) for g in groups]
     themes.sort(key=lambda t: t.weighted_score, reverse=True)
@@ -162,6 +167,7 @@ def synthesize(scored: list[Scored], *, k: float = 0.5, threshold: float = 0.18,
                 "engagement_coverage": {"present": present, "total": len(scored)},
                 "distinct_targets": len({s.item.responds_to for s in scored}),
                 "coarseness": _COARSENESS},
+        model_layer=tuple(model_scores or ()),
     )
     from chorus.receipt import build_receipt
-    return dataclasses.replace(digest, receipt=build_receipt(scored, digest))
+    return dataclasses.replace(digest, receipt=build_receipt(scored, digest, model_ref=model_ref))
