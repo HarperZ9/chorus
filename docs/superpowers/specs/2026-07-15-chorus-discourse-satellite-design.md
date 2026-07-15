@@ -108,9 +108,13 @@ DiscourseItem:
 ### 3. `synthesize.py` — the discourse synthesis
 
 - **Cluster:** group items into themes with zero-dep, deterministic clustering:
-  hashed TF-IDF feature vectors, cosine similarity, connected-components (or
-  single-link agglomerative) above a stated threshold. Deterministic given the
-  same input and params.
+  hashed TF-IDF feature vectors and cosine similarity, using **leader (greedy
+  nearest-leader)** assignment above a stated threshold. (Phase 1 implementation
+  note: single-link connected-components was tried first and rejected — on 1082
+  real comments it chained 991 into one megatheme; leader assignment requires
+  similarity to a cluster's leader, not a transitive chain, so it resists that
+  collapse. Leaders seed in engagement order, so popular comments anchor themes.)
+  Deterministic given the same input and params.
 - **Weight:** each item's weight is `w = g(engagement) * (1 + k * |compound|)`,
   where `g` is a damped engagement transform (e.g. `log1p`) and `k` is the
   sentiment-intensity coefficient. The exact formula and constants are recorded
