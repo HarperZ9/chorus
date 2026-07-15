@@ -111,6 +111,11 @@ def _cmd_watch(args) -> int:
     return 0
 
 
+def _cmd_mcp(args) -> int:
+    from chorus.mcp import serve
+    return serve()
+
+
 def _cmd_digests(args) -> int:
     from chorus.daemon import DigestStore
     store = DigestStore(args.store)
@@ -177,5 +182,7 @@ def main(argv: list[str] | None = None) -> int:
     digests.add_argument("store", help="the daemon's digest store directory")
     digests.add_argument("--limit", type=int, default=20)
     digests.set_defaults(func=_cmd_digests)
+    mcp = sub.add_parser("mcp", help="run the chorus MCP stdio server")
+    mcp.set_defaults(func=_cmd_mcp)
     args = parser.parse_args(argv)
     return args.func(args)
