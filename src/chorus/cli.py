@@ -77,6 +77,45 @@ def _cmd_corpora(args) -> int:
     return 1 if "error" in out else 0
 
 
+def _cmd_watch(args) -> int:
+    from chorus.daemon import Watchlist
+    wl = Watchlist.load(args.watchlist) if os.path.exists(args.watchlist) else Watchlist([])
+    if args.op == "add":
+        if not args.corpus:
+            print("chorus: watch add needs a corpus path", file=sys.stderr)
+            return 1
+        wl.add(args.corpus)
+        wl.save(args.watchlist)
+    elif args.op == "remove":
+        wl.remove(args.corpus or "")
+        wl.save(args.watchlist)
+    print(json.dumps({"watchlist": args.watchlist, "sources": wl.sources}, indent=2))
+    return 0
+
+
+def _cmd_daemon(args) -> int:
+    import time
+    from chorus.daemon import Watchlist, DigestStore, tick
+    if not os.path.exists(args.watchlist):
+        print(f"chorus: watchlist not found: {args.watchlist}", file=sys.stderr)
+        return 1
+    store = DigestStore(args.store)
+    if args.once:
+        out = tick(Watchlist.load(args.watchlist), store)
+        print(json.dumps(out, indent=2, ensure_ascii=False))
+        return 0
+    # scheduled poll: re-read the watchlist each tick so edits take effect live.
+    print(f"chorus daemon: polling {args.watchlist} every {args.interval}s -> {args.store}")
+    try:
+        while True:
+            out = tick(Watchlist.load(args.watchlist), store)
+            synthesized = [r for r in out["results"] if r.get("status") == "synthesized"]
+            print(json.dumps({"ticked": out["ticked"], "synthesized": len(synthesized)}))
+            time.sleep(max(1, args.interval))
+    except KeyboardInterrupt:
+        return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     # Emit UTF-8 regardless of the console/redirect codepage: a digest of real comments carries
     # emoji and non-Latin text, which would crash a cp1252 stdout on Windows. Guarded because a
@@ -92,5 +131,16 @@ def main(argv: list[str] | None = None) -> int:
     corpora = sub.add_parser("corpora", help="discover gather corpora under a root as discourse sources")
     corpora.add_argument("root", help="a directory to scan for gather corpora (dirs holding catalog.jsonl)")
     corpora.set_defaults(func=_cmd_corpora)
+    watch = sub.add_parser("watch", help="manage the daemon watchlist")
+    watch.add_argument("op", choices=["add", "list", "remove"])
+    watch.add_argument("corpus", nargs="?", help="a corpus path (for add/remove)")
+    watch.add_argument("--watchlist", default="watchlist.json")
+    watch.set_defaults(func=_cmd_watch)
+    daemon = sub.add_parser("daemon", help="poll the watchlist and synthesize on change")
+    daemon.add_argument("--watchlist", default="watchlist.json")
+    daemon.add_argument("--store", default=".chorus-run", help="where digests are stored")
+    daemon.add_argument("--once", action="store_true", help="run a single tick and exit")
+    daemon.add_argument("--interval", type=int, default=300, help="seconds between ticks")
+    daemon.set_defaults(func=_cmd_daemon)
     args = parser.parse_args(argv)
     return args.func(args)
