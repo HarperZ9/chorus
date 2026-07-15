@@ -70,6 +70,13 @@ def _cmd_run(args) -> int:
     return 0
 
 
+def _cmd_corpora(args) -> int:
+    from chorus.corpora import list_corpora
+    out = list_corpora(args.root)
+    print(json.dumps(out, indent=2, sort_keys=True, ensure_ascii=False))
+    return 1 if "error" in out else 0
+
+
 def main(argv: list[str] | None = None) -> int:
     # Emit UTF-8 regardless of the console/redirect codepage: a digest of real comments carries
     # emoji and non-Latin text, which would crash a cp1252 stdout on Windows. Guarded because a
@@ -82,5 +89,8 @@ def main(argv: list[str] | None = None) -> int:
     run.add_argument("path", help="a JSON file of gather-style rows, or a gather corpus directory")
     run.add_argument("--verify", action="store_true", help="re-derive and confirm the receipt")
     run.set_defaults(func=_cmd_run)
+    corpora = sub.add_parser("corpora", help="discover gather corpora under a root as discourse sources")
+    corpora.add_argument("root", help="a directory to scan for gather corpora (dirs holding catalog.jsonl)")
+    corpora.set_defaults(func=_cmd_corpora)
     args = parser.parse_args(argv)
     return args.func(args)
