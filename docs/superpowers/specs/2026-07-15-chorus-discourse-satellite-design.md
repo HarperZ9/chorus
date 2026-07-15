@@ -182,7 +182,15 @@ The digest never claims sentiment is ground truth. It states the method and its
 known coarseness (lexicon sarcasm-blindness, clustering granularity) as a
 first-class honest null.
 
-## Scoped gather fix (ships with this work, in gather)
+## Scoped gather fix (SHIPPED 2026-07-15, in gather)
+
+Done and merged to gather `main`: `parse_video` now carries `like_count`,
+`parent`, `is_pinned`, `author_is_verified`, and `author_is_uploader` into the
+comment Item meta when yt-dlp provides them, absent otherwise (honest null).
+Verified end to end: gather captured 116 real comments with engagement, and
+`chorus run` on that corpus reported `engagement_coverage {present:116, total:116}`
+with real weighted ranking, where before the fix every weight was 0. The original
+requirement, for the record:
 
 gather's `video.py` comment Item must preserve engagement so a downstream reader
 (chorus or a human) can rank what the community signalled:
@@ -214,9 +222,11 @@ gather's `video.py` comment Item must preserve engagement so a downstream reader
 
 ## Build order (phases, each a shippable slice)
 
-1. `item` + `sentiment.lexicon` + `synthesize` + the digest receipt + CLI `run`
-   (the core lens, fully offline and deterministic).
-2. The scoped gather engagement fix, so real corpora carry weight.
+1. [SHIPPED] `item` + `sentiment.lexicon` + `synthesize` + the digest receipt +
+   CLI `run` (the core lens, fully offline and deterministic). 26 tests,
+   whole-branch reviewed, verified on 1082 real comments.
+2. [SHIPPED] The scoped gather engagement fix, so real corpora carry weight.
+   Merged to gather main; the loop is closed end to end.
 3. `daemon` (watchlist tick + cursor store) then the on-demand job endpoint.
 4. `sentiment.model_pass` (optional, provenance-tagged).
 5. MCP surface, then the Flywheel desktop destination (canon-constrained).
