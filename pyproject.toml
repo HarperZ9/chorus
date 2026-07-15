@@ -1,0 +1,16 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "chorus-discourse"
+version = "0.1.0"
+description = "A discourse-synthesis satellite for gather: weighted, clustered, re-checkable readings of comment corpora."
+requires-python = ">=3.10"
+dependencies = []
+
+[project.scripts]
+chorus = "chorus.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
