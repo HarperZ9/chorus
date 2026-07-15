@@ -1,0 +1,8 @@
+__pycache__/
+*.pyc
+.env
+.env.*
+dist/
+*.egg-info/
+.chorus-run/
+CLAUDE.local.md
