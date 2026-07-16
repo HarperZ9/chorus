@@ -10,6 +10,7 @@ import dataclasses
 import hashlib
 import math
 import re
+import statistics
 from collections import Counter
 from dataclasses import dataclass
 
@@ -94,6 +95,12 @@ class Theme:
     representative: str
     dissent: str | None
     item_ids: tuple[str, ...]
+    # How contested the theme is: the population standard deviation of its members'
+    # compound sentiment, in [0, 1]. 0 is consensus (everyone agrees, however strongly);
+    # it approaches 1 as voices split hard between +1 and -1. It reads out how divided
+    # AND how strongly felt a theme is, so the valuable debate can be surfaced, not just
+    # the loudest agreement. Re-derivable (folded into the receipt); never a verdict.
+    controversy: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -102,6 +109,11 @@ class Digest:
     n_items: int
     themes: tuple[Theme, ...]
     method: dict
+    # Aspect-level contestedness: the topics the corpus is genuinely SPLIT on, ranked.
+    # It is measured across every item mentioning a term, so it survives the lexical
+    # clustering that separates positive and negative wording about the same topic into
+    # different themes. Each row: {term, mentions, pos, neg, contested}. Re-derivable.
+    contested: tuple = ()
     receipt: object = None    # DigestReceipt; set by synthesize()
     # An optional model-sentiment overlay: advisory, provenance-tagged model opinion on the
     # lexicon-uncertain items. Deliberately NOT part of digest_body_sha, so it never changes the
@@ -126,6 +138,7 @@ def _build_theme(group, *, k, pos_cut, neg_cut) -> Theme:
                 if ((s.compound <= neg_cut) if majority_pos else (s.compound >= pos_cut))]
     dissent = max(minority, key=lambda sw: sw[1])[0].item.id if minority else None
     representative = max(weighted, key=lambda sw: sw[1])[0].item.id
+    controversy = round(statistics.pstdev([s.compound for s in group]), 4) if n > 1 else 0.0
     return Theme(
         label=_label(group, top_terms),
         terms=tuple(top_terms),
@@ -137,11 +150,46 @@ def _build_theme(group, *, k, pos_cut, neg_cut) -> Theme:
         representative=representative,
         dissent=dissent,
         item_ids=tuple(s.item.id for s in group),
+        controversy=controversy,
     )
 
 
 _COARSENESS = ("lexicon sentiment is English-only and literal (no sarcasm, irony, or context); "
                "clustering is lexical, not semantic. Sentiment is a weight, never a verdict.")
+
+_ASPECT_MIN_MENTIONS = 3   # a term needs this many mentioning voices to be judged contested
+_ASPECT_TOP_K = 12         # how many contested aspects the digest surfaces
+
+
+def contested_aspects(scored: list[Scored], *, pos_cut: float, neg_cut: float,
+                      min_mentions: int = _ASPECT_MIN_MENTIONS,
+                      top_k: int = _ASPECT_TOP_K) -> tuple:
+    """Aspect-level contestedness, immune to the lexical clustering that separates
+    positive and negative wording about the same topic into different themes. For each
+    salient term, gather EVERY item that mentions it and measure how split their
+    sentiment is. A term qualifies only with real two-sided disagreement (at least one
+    clearly positive AND one clearly negative voice); one-sided praise, one-sided
+    complaint, or neutral chatter is excluded. Deterministic and re-derivable: ranked by
+    contestedness (population stdev of the mentioning items' compound), then by how many
+    voices weighed in, then by term."""
+    buckets: dict[str, list[float]] = {}
+    for s in scored:
+        for t in set(_terms(s.item.text)):
+            buckets.setdefault(t, []).append(s.compound)
+    rows = []
+    for t, comps in buckets.items():
+        n = len(comps)
+        if n < min_mentions:
+            continue
+        pos = sum(1 for c in comps if c >= pos_cut)
+        neg = sum(1 for c in comps if c <= neg_cut)
+        if pos < 1 or neg < 1:                 # not two-sided -> not contested
+            continue
+        rows.append({"term": t, "mentions": n,
+                     "pos": round(pos / n, 3), "neg": round(neg / n, 3),
+                     "contested": round(statistics.pstdev(comps), 4)})
+    rows.sort(key=lambda r: (-r["contested"], -r["mentions"], r["term"]))
+    return tuple(rows[:top_k])
 
 
 def _responds_to(scored: list[Scored]) -> str:
@@ -153,6 +201,7 @@ def _responds_to(scored: list[Scored]) -> str:
 
 def synthesize(scored: list[Scored], *, k: float = 0.5, threshold: float = 0.18,
                dims: int = 512, pos_cut: float = 0.1, neg_cut: float = -0.1,
+               aspect_min_mentions: int = _ASPECT_MIN_MENTIONS, aspect_top_k: int = _ASPECT_TOP_K,
                model_scores: list[dict] | None = None, model_ref: str | None = None) -> Digest:
     groups = cluster(scored, threshold=threshold, dims=dims)
     themes = [_build_theme(g, k=k, pos_cut=pos_cut, neg_cut=neg_cut) for g in groups]
@@ -164,9 +213,12 @@ def synthesize(scored: list[Scored], *, k: float = 0.5, threshold: float = 0.18,
         responds_to=_responds_to(scored), n_items=len(scored), themes=tuple(themes),
         method={"weight_k": k, "cluster_threshold": threshold, "dims": dims,
                 "pos_cut": pos_cut, "neg_cut": neg_cut,
+                "aspect_min_mentions": aspect_min_mentions, "aspect_top_k": aspect_top_k,
                 "engagement_coverage": {"present": present, "total": len(scored)},
                 "distinct_targets": len({s.item.responds_to for s in scored}),
                 "coarseness": _COARSENESS},
+        contested=contested_aspects(scored, pos_cut=pos_cut, neg_cut=neg_cut,
+                                    min_mentions=aspect_min_mentions, top_k=aspect_top_k),
         model_layer=tuple(model_scores or ()),
     )
     from chorus.receipt import build_receipt

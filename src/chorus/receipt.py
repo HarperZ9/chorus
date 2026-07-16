@@ -14,7 +14,7 @@ from dataclasses import dataclass
 
 from chorus.sentiment import Scored, lexicon_vocab_sha
 
-METHOD_VERSION = "chorus-lens/1"
+METHOD_VERSION = "chorus-lens/2"   # /2 added theme.controversy + aspect contestedness to the body
 
 
 @dataclass(frozen=True)
@@ -38,8 +38,10 @@ def input_digest(scored: list[Scored]) -> str:
 
 def digest_body_sha(digest) -> str:
     body = [[t.label, list(t.item_ids), t.weighted_score,
-             t.sentiment, t.representative, t.dissent] for t in digest.themes]
-    return _sha([digest.responds_to, digest.n_items, digest.method, body])
+             t.sentiment, t.representative, t.dissent, t.controversy] for t in digest.themes]
+    contested = [[c["term"], c["mentions"], c["pos"], c["neg"], c["contested"]]
+                 for c in digest.contested]
+    return _sha([digest.responds_to, digest.n_items, digest.method, body, contested])
 
 
 def build_receipt(scored: list[Scored], digest, *, model_ref: str | None = None) -> DigestReceipt:
@@ -48,7 +50,9 @@ def build_receipt(scored: list[Scored], digest, *, model_ref: str | None = None)
         input_sha256=input_digest(scored),
         lexicon_vocab_sha=lexicon_vocab_sha(),
         cluster_params={"threshold": m["cluster_threshold"], "dims": m["dims"],
-                        "pos_cut": m["pos_cut"], "neg_cut": m["neg_cut"]},
+                        "pos_cut": m["pos_cut"], "neg_cut": m["neg_cut"],
+                        "aspect_min_mentions": m["aspect_min_mentions"],
+                        "aspect_top_k": m["aspect_top_k"]},
         weight_formula={"expr": "log1p(engagement)*(1+k*abs(compound))", "k": m["weight_k"]},
         model_ref=model_ref,
         digest_sha256=digest_body_sha(digest),
@@ -78,10 +82,15 @@ def verify(digest, scored: list[Scored]) -> bool:
         return False
     from chorus.sentiment import score as _score
     from chorus.synthesize import synthesize as _synthesize
+    from chorus.synthesize import _ASPECT_MIN_MENTIONS, _ASPECT_TOP_K
     cp = r.cluster_params
     rederived = _synthesize(
         _score([s.item for s in scored]),
         k=r.weight_formula["k"], threshold=cp["threshold"], dims=cp["dims"],
         pos_cut=cp["pos_cut"], neg_cut=cp["neg_cut"],
+        # re-derive contestedness from the RECORDED aspect params, not live constants,
+        # so bumping a default cannot silently break an already-versioned receipt
+        aspect_min_mentions=cp.get("aspect_min_mentions", _ASPECT_MIN_MENTIONS),
+        aspect_top_k=cp.get("aspect_top_k", _ASPECT_TOP_K),
     )
     return digest_body_sha(rederived) == r.digest_sha256

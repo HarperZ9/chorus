@@ -27,6 +27,48 @@ def test_synthesize_builds_ranked_themes_with_distribution_and_dissent():
     assert audio.representative == "a"
 
 
+def test_controversy_is_high_for_a_split_theme_and_zero_for_consensus():
+    # a theme where voices are fiercely split pos/neg is contested; one where they
+    # all agree is consensus. controversy quantifies that, in [0, 1].
+    split = synthesize([_s("the sound design mix", 5, 0.9, "a"),
+                        _s("the sound design mix", 5, -0.9, "b")], threshold=0.0)
+    consensus = synthesize([_s("the sound design mix", 5, 0.8, "c"),
+                            _s("the sound design mix", 5, 0.8, "d")], threshold=0.0)
+    assert 0.0 <= split.themes[0].controversy <= 1.0
+    assert split.themes[0].controversy > 0.8          # ±0.9 split -> near the ceiling
+    assert consensus.themes[0].controversy == 0.0     # identical sentiment -> no contest
+    assert split.themes[0].controversy > consensus.themes[0].controversy
+
+
+def test_contested_aspects_surface_two_sided_topics_immune_to_lexical_split():
+    # lexical clustering separates "battery is amazing" from "battery is terrible" into
+    # different themes; aspect contestedness gathers EVERY item mentioning "battery" and
+    # sees the split. one-sided praise ("screen") is not contested.
+    scored = [
+        _s("the battery life is incredible amazing", 50, 0.7, "a"),
+        _s("battery life is amazing best ever", 40, 0.6, "b"),
+        _s("the battery is terrible drains fast", 45, -0.6, "c"),
+        _s("awful battery life so disappointing", 30, -0.5, "d"),
+        _s("the screen display is gorgeous bright", 40, 0.6, "e"),
+        _s("stunning screen display love it", 35, 0.6, "f"),
+        _s("beautiful screen display colors", 20, 0.5, "g"),
+    ]
+    d = synthesize(scored, threshold=0.2)
+    terms = [c["term"] for c in d.contested]
+    assert "battery" in terms                          # genuinely two-sided -> contested
+    assert "screen" not in terms and "display" not in terms   # one-sided praise -> excluded
+    top = d.contested[0]
+    assert top["mentions"] >= 3 and top["pos"] >= 0 and top["neg"] > 0
+    assert 0.0 <= top["contested"] <= 1.0
+
+
+def test_contested_is_empty_when_nothing_is_two_sided():
+    scored = [_s("the screen is gorgeous bright", 5, 0.6, "a"),
+              _s("the screen is gorgeous vivid", 5, 0.6, "b"),
+              _s("the screen is gorgeous sharp", 5, 0.6, "c")]
+    assert synthesize(scored, threshold=0.0).contested == ()
+
+
 def test_theme_with_no_minority_has_no_dissent():
     scored = [_s("great", 5, 0.6, "a"), _s("great wonderful", 5, 0.6, "b")]
     d = synthesize(scored, threshold=0.0)
