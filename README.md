@@ -75,3 +75,7 @@ tells you what it did and hands you the means to check it.
 Source-available under the Chorus Fair-Source License (see [LICENSE](LICENSE)):
 read it, run it, build on it; commercial use that competes with the project is
 reserved.
+
+---
+
+**[Zentropy Labs](https://github.com/ZentropyLabs-ai)** · order out of entropy. An independent lab building evidence-first tools that leave a re-checkable artifact behind. Built by Zain Dana Harper in Seattle. The full workbench is at [Project Telos](https://harperz9.github.io).
