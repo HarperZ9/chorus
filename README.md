@@ -72,7 +72,7 @@ tells you what it did and hands you the means to check it.
 
 ## License
 
-Source-available under the Chorus Fair-Source License (see [LICENSE](LICENSE)):
+Source-available under the Functional Source License (FSL-1.1-MIT) (see [LICENSE](LICENSE)):
 read it, run it, build on it; commercial use that competes with the project is
 reserved.
 

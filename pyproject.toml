@@ -7,7 +7,8 @@ name = "chorus-discourse"
 version = "0.1.0"
 description = "A discourse-synthesis satellite for gather: weighted, clustered, re-checkable readings of comment corpora."
 requires-python = ">=3.10"
-license = { file = "LICENSE" }
+license = "LicenseRef-FSL-1.1-MIT"
+license-files = ["LICENSE"]
 dependencies = []
 
 [project.scripts]
