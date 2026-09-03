@@ -1,5 +1,7 @@
 # chorus
 
+![chorus](docs/art/chorus-header.svg)
+
 Read a comment section the way you wish you could: not scrolled, but **synthesized**.
 
 chorus takes a corpus of comments or threads and returns a weighted, clustered,
@@ -11,6 +13,8 @@ stranger can re-run to get the same answer. Zero third-party runtime dependencie
 
 It orbits [gather](https://github.com/HarperZ9/gather): gather captures the corpus
 with provenance, chorus synthesizes the discourse on top of it.
+
+![Eight stages of turning a corpus of comments into a discourse digest: normalize, engagement, score, weight, cluster, themes, contested, and receipt. Gathered rows become discourse items, and rows that are not discourse are skipped. Engagement is read from the source when it is present; when a source genuinely has no signal, engagement is zero and the absence is recorded, so a missing vote is never counted as a real zero-weight one. Sentiment comes from a thirty word lexicon with negation, intensifier, capitalization and punctuation rules, and the same text always scores the same. Weight is the natural log of one plus engagement, multiplied by one plus half the sentiment intensity, so a loud comment nobody engaged with stays small. Clustering is a hashed TF-IDF cosine against the nearest leader across five hundred and twelve dimensions, seeded most-engaged first. Each theme carries its size, its sentiment split, its controversy, and the single highest-weight voice that disagrees with the majority. Contested aspects are measured separately across every comment that mentions a term, so a topic the corpus is split on survives the clustering that would file praise and complaint about it under different themes. The receipt hashes the inputs, the parameters and the digest body. Three outcomes: re-derived, rejected, and advisory only.](docs/art/synthesis-lane.svg)
 
 ## What you get
 
@@ -54,6 +58,8 @@ JSON list of rows. Add `--model "<command>"` to `run` to overlay a model's read 
 the comments the lexicon is least sure about; the overlay is provenance-tagged and
 never enters the re-checkable core.
 
+![Eight stages of verifying a discourse digest: receipt, version, vocabulary, inputs, rescore, recluster, rehash, and verdict. The receipt supplies the parameters and hashes the original run recorded. The method version has to still match, because a digest built under an older pipeline is not re-derivable under this one. The lexicon is hashed into the receipt, so editing the word list invalidates every digest that was built with the old one. The corpus hash is checked before any work is done. Then the stored sentiment is thrown away and every comment is re-scored from its own text, which is why fabricated sentiment cannot verify. Clustering and weighting re-run from the parameters the receipt recorded, not from the live defaults, so raising a default cannot silently break an already-versioned receipt. The digest body is rebuilt from that re-derivation and hashed. The verdict is one boolean with nothing taken on trust: a digest whose themes, weights or sentiment distribution do not follow from the inputs fails, even when its own stored hash was recomputed to match its tampered body. Three outcomes: verified, tampered, and no receipt.](docs/art/verify-lane.svg)
+
 ## The receipt
 
 The digest's `receipt` binds the inputs, the method, and the result. `verify`
@@ -62,6 +68,8 @@ and checks the hash, so a dishonest digest cannot pass. Any model overlay is lis
 separately with its own provenance and is excluded from that check: the parts a
 stranger can re-derive and the parts that are model opinion are kept distinct, on
 the record.
+
+![Twelve rows covering every number a digest reports and where it comes from. The lexicon is thirty words, fifteen positive and fifteen negative, each carrying a valence between minus three and plus three, and the whole list is hashed into every receipt. Ten intensifiers are looked for up to three tokens back, widening or narrowing a valence. Nine negators flip a valence and keep about three quarters of its size, so a negation weakens a claim rather than erasing it. The compound score runs from minus one to one, the summed valence divided by the root of itself squared plus fifteen, so no single loud comment runs away with a theme. Two emphases apply: an all-caps valence word of more than one letter counts a quarter more, and up to four exclamation marks add five percent each. Weight is the log of one plus engagement, times one plus half the sentiment intensity. Clustering runs a hashed TF-IDF cosine over five hundred and twelve dimensions against the nearest leader, joining above eighteen hundredths, seeded most-engaged first. Controversy is the population standard deviation of a theme's sentiment, zero at consensus and near one at a hard split. Twelve contested aspects are surfaced, each needing three mentioning voices and real disagreement on both sides. The receipt carries seven fields. The accented row is the model overlay, which is advisory opinion on the items the lexicon is least sure of and is deliberately kept outside the digest hash. The last row is engagement coverage, which reports how many items actually carried a signal, because an absent signal is recorded absent rather than counted as a zero.](docs/art/method-table.svg)
 
 ## Design
 
