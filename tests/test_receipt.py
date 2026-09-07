@@ -92,4 +92,124 @@ def test_digest_hash_is_pinned_for_a_fixed_input():
             {"kind": "comment", "id": "b", "ref": "v", "text": "loved the sound design", "meta": {"like_count": 3}},
             {"kind": "comment", "id": "c", "ref": "v", "text": "the plot was bad", "meta": {"like_count": 9}}]
     d = synthesize(score(normalize(rows)))
-    assert d.receipt.digest_sha256 == "d2dc18d6979ec74c252bbca67f0b0a906906c5aa30f92fa7cb5d346e62178f66"
+    assert d.receipt.digest_sha256 == "d7ce626ab7f2c68125a7630d362be153abae87aa2757865777dd569bcd8c0b9f"
+
+
+def test_tampered_label_quality_fails_verification():
+    """Label-support metadata is user-facing evidence, so a forged warning state must be caught
+    by re-derivation just like a forged label or score."""
+    from chorus.receipt import digest_body_sha
+    scored = score(_items())
+    d = synthesize(scored, threshold=0.1)
+    assert d.receipt.method_version == "chorus-lens/3"
+    lie = dataclasses.replace(d.themes[0], label_quality={"support": "forged", "warnings": ()})
+    forged = dataclasses.replace(d, themes=(lie,) + d.themes[1:])
+    forged = dataclasses.replace(
+        forged, receipt=dataclasses.replace(forged.receipt, digest_sha256=digest_body_sha(forged)))
+    assert verify(forged, scored) is False
+
+
+def _historical_v2_digest():
+    """Fixture generated from branch base/origin main for _items(), threshold=0.1."""
+    from chorus.receipt import DigestReceipt
+    from chorus.synthesize import Digest, Theme
+    return Digest(
+        responds_to="v",
+        n_items=3,
+        themes=(
+            Theme(
+                label="sound / great / design",
+                terms=("sound", "great", "design", "audio"),
+                size=2,
+                weighted_score=6.0306,
+                sentiment={"pos": 1.0, "neg": 0.0, "neu": 0.0, "mean_compound": 0.4939},
+                representative="a",
+                dissent=None,
+                item_ids=("a", "b"),
+                label_quality={},
+                controversy=0.0,
+            ),
+            Theme(
+                label="story / plot / bad",
+                terms=("story", "plot", "bad"),
+                size=1,
+                weighted_score=2.594,
+                sentiment={"pos": 0.0, "neg": 1.0, "neu": 0.0, "mean_compound": -0.3612},
+                representative="c",
+                dissent=None,
+                item_ids=("c",),
+                label_quality={},
+                controversy=0.0,
+            ),
+        ),
+        method={
+            "weight_k": 0.5,
+            "cluster_threshold": 0.1,
+            "dims": 512,
+            "pos_cut": 0.1,
+            "neg_cut": -0.1,
+            "aspect_min_mentions": 3,
+            "aspect_top_k": 12,
+            "engagement_coverage": {"present": 0, "total": 3},
+            "distinct_targets": 1,
+            "coarseness": (
+                "lexicon sentiment is English-only and literal (no sarcasm, irony, or context); "
+                "clustering is lexical, not semantic. Sentiment is a weight, never a verdict."
+            ),
+        },
+        contested=(),
+        receipt=DigestReceipt(
+            input_sha256="2cd4e8b90197fe4fc10822cb55a44ecec0c1e25bac45aacf6d54f1fe483e0b56",
+            lexicon_vocab_sha="71409fbb6984bdc8",
+            cluster_params={
+                "threshold": 0.1,
+                "dims": 512,
+                "pos_cut": 0.1,
+                "neg_cut": -0.1,
+                "aspect_min_mentions": 3,
+                "aspect_top_k": 12,
+            },
+            weight_formula={"expr": "log1p(engagement)*(1+k*abs(compound))", "k": 0.5},
+            model_ref=None,
+            digest_sha256="135c35ce633e0edbbc30152d88638be825348c2a514d2540c00432db76698970",
+            method_version="chorus-lens/2",
+        ),
+    )
+
+
+def test_tampered_label_quality_with_original_receipt_fails_verification():
+    """The submitted digest body must match its receipt before re-derivation is trusted."""
+    scored = score(_items())
+    d = synthesize(scored, threshold=0.1)
+    lie = dataclasses.replace(d.themes[0], label_quality={"support": "forged", "warnings": ()})
+    forged = dataclasses.replace(d, themes=(lie,) + d.themes[1:])
+    assert verify(forged, scored) is False
+
+
+def test_historical_v2_receipt_from_base_verifies():
+    scored = score(_items())
+    assert verify(_historical_v2_digest(), scored) is True
+
+
+def test_historical_v2_tamper_with_original_receipt_fails_verification():
+    scored = score(_items())
+    d = _historical_v2_digest()
+    lie = dataclasses.replace(d.themes[0], label="sound / forged / design")
+    forged = dataclasses.replace(d, themes=(lie,) + d.themes[1:])
+    assert verify(forged, scored) is False
+
+
+def test_historical_v2_tamper_with_recomputed_receipt_fails_verification():
+    from chorus.receipt import digest_body_sha
+    scored = score(_items())
+    d = _historical_v2_digest()
+    lie = dataclasses.replace(d.themes[0], weighted_score=999.0)
+    forged = dataclasses.replace(d, themes=(lie,) + d.themes[1:])
+    forged = dataclasses.replace(
+        forged,
+        receipt=dataclasses.replace(
+            forged.receipt,
+            digest_sha256=digest_body_sha(forged, method_version="chorus-lens/2"),
+        ),
+    )
+    assert verify(forged, scored) is False

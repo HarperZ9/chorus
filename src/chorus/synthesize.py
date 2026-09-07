@@ -19,6 +19,18 @@ from chorus.sentiment import Scored
 _WORD = re.compile(r"\w+", re.UNICODE)   # Unicode-aware so non-Latin corpora still form term vectors
 _STOP = set("the a an and or but of to in on for is are was were be been it this that "
             "i you he she they we my your with as at by from so not no".split())
+_LABEL_STOP = _STOP | set(
+    "all also amazing any are around awesome back because banger been being best better brb bro can "
+    "clean come comes coming comment comments cool could crazy did does doing done dropped each encounter everytime except "
+    "else even every get gets getting give gives good got great had has have having her here him "
+    "his how huge incredibly genuinely god guy guys helpful just know knows last least less like lot love "
+    "loved loving made make makes making many maybe more most much "
+    "need needs never nice nicely only other others out over people person please probably put "
+    "puts really respect right said same saw say says see seen seem seems share shared sharing "
+    "should some still stuff such than thank thanks then there these "
+    "they thing things think those time too tried try trying under use used using very video want "
+    "wait wants was way were what when where which while who why will without would youtube own valuable".split()
+)
 
 
 def item_weight(engagement: int, compound: float, *, k: float = 0.5) -> float:
@@ -95,6 +107,10 @@ class Theme:
     representative: str
     dissent: str | None
     item_ids: tuple[str, ...]
+    # Label quality is deterministic evidence about how the label was chosen. It keeps
+    # weak labels and singleton themes visible instead of letting them read like broad
+    # corpus themes.
+    label_quality: dict
     # How contested the theme is: the population standard deviation of its members'
     # compound sentiment, in [0, 1]. 0 is consensus (everyone agrees, however strongly);
     # it approaches 1 as voices split hard between +1 and -1. It reads out how divided
@@ -121,14 +137,81 @@ class Digest:
     model_layer: tuple = ()
 
 
-def _label(group, top_terms):
+def _label(top_terms):
     return " / ".join(top_terms[:3]) if top_terms else "(untitled theme)"
 
 
-def _build_theme(group, *, k, pos_cut, neg_cut) -> Theme:
+def _label_stats(scored: list[Scored]) -> dict:
+    df: dict[str, int] = {}
+    for s in scored:
+        for t in set(_terms(s.item.text)):
+            df[t] = df.get(t, 0) + 1
+    return {"n": len(scored), "df": df}
+
+
+def _label_terms(group: list[Scored], label_stats: dict) -> tuple[tuple[str, ...], dict]:
+    tf = Counter(t for s in group for t in _terms(s.item.text))
+    cluster_df = Counter(t for s in group for t in set(_terms(s.item.text)))
+    corpus_df = label_stats["df"]
+    corpus_n = max(1, label_stats["n"])
+    warnings: list[str] = []
+    if len(group) == 1:
+        min_support = 1
+        support = "singleton"
+        warnings.append("singleton_theme")
+    else:
+        min_support = max(2, math.ceil(len(group) * 0.4))
+        support = "cluster"
+
+    def rows(min_docs: int) -> list[tuple[str, float, int, int]]:
+        out = []
+        for term, docs in cluster_df.items():
+            if docs < min_docs or term in _LABEL_STOP:
+                continue
+            # Do not let corpus-wide chatter become a label even if a cluster repeats it.
+            # Tiny fixtures often have one cluster; there, high corpus frequency is evidence
+            # of the fixture's topic rather than chatter.
+            if corpus_n >= 20 and corpus_df.get(term, 0) / corpus_n > 0.35:
+                continue
+            idf = math.log((corpus_n + 1) / (corpus_df.get(term, 0) + 1)) + 1.0
+            score = docs * idf + 0.05 * tf[term]
+            out.append((term, score, docs, corpus_df.get(term, 0)))
+        out.sort(key=lambda x: (-x[1], x[0]))
+        return out
+
+    candidates = rows(min_support)
+    if len(group) > 1 and len(candidates) < 2:
+        candidates = rows(1)
+        support = "weak"
+        warnings.append("weak_label_support")
+    if not candidates:
+        candidates = [(term, float(count), cluster_df[term], corpus_df.get(term, 0))
+                      for term, count in tf.most_common(5)]
+        support = "fallback"
+        warnings.append("generic_fallback")
+
+    label_terms = tuple(term for term, _, _, _ in candidates[:5])
+    quality = {
+        "support": support,
+        "warnings": tuple(warnings),
+        "coverage": {
+            "cluster_size": len(group),
+            "min_cluster_docs": min_support,
+            "top_cluster_docs": candidates[0][2] if candidates else 0,
+        },
+        "selected_terms": tuple({
+            "term": term,
+            "score": round(score, 4),
+            "cluster_docs": docs,
+            "corpus_docs": corpus_docs,
+        } for term, score, docs, corpus_docs in candidates[:5]),
+    }
+    return label_terms, quality
+
+
+def _build_theme(group, *, k, pos_cut, neg_cut, label_stats) -> Theme:
     weighted = [(s, item_weight(s.item.engagement, s.compound, k=k)) for s in group]
-    term_counts = Counter(t for s in group for t in _terms(s.item.text))
-    top_terms = [t for t, _ in term_counts.most_common(5)]
+    top_terms, label_quality = _label_terms(group, label_stats)
     pos = sum(1 for s in group if s.compound >= pos_cut)
     neg = sum(1 for s in group if s.compound <= neg_cut)
     neu = len(group) - pos - neg
@@ -140,7 +223,7 @@ def _build_theme(group, *, k, pos_cut, neg_cut) -> Theme:
     representative = max(weighted, key=lambda sw: sw[1])[0].item.id
     controversy = round(statistics.pstdev([s.compound for s in group]), 4) if n > 1 else 0.0
     return Theme(
-        label=_label(group, top_terms),
+        label=_label(top_terms),
         terms=tuple(top_terms),
         size=n,
         weighted_score=round(sum(w for _, w in weighted), 4),
@@ -150,6 +233,7 @@ def _build_theme(group, *, k, pos_cut, neg_cut) -> Theme:
         representative=representative,
         dissent=dissent,
         item_ids=tuple(s.item.id for s in group),
+        label_quality=label_quality,
         controversy=controversy,
     )
 
@@ -204,7 +288,9 @@ def synthesize(scored: list[Scored], *, k: float = 0.5, threshold: float = 0.18,
                aspect_min_mentions: int = _ASPECT_MIN_MENTIONS, aspect_top_k: int = _ASPECT_TOP_K,
                model_scores: list[dict] | None = None, model_ref: str | None = None) -> Digest:
     groups = cluster(scored, threshold=threshold, dims=dims)
-    themes = [_build_theme(g, k=k, pos_cut=pos_cut, neg_cut=neg_cut) for g in groups]
+    label_stats = _label_stats(scored)
+    themes = [_build_theme(g, k=k, pos_cut=pos_cut, neg_cut=neg_cut, label_stats=label_stats)
+              for g in groups]
     themes.sort(key=lambda t: t.weighted_score, reverse=True)
     # Honest null surfaced in the digest itself: how many items actually carried an engagement
     # signal, how many distinct targets, and the method's coarseness. All hashed into the receipt.
