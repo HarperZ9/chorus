@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+- Adds `chorus decision` and MCP `chorus.decision`, a source-to-decision workflow
+  that compares current and reference gather-style source packs, reports
+  added/removed/changed/unchanged item ids, verifies both deterministic Chorus
+  digests, and returns typed `UNVERIFIABLE` failure states for missing, malformed,
+  empty, or ambiguous source inputs.
+- Adds an allowlisted public projection for the decision result. It keeps counts,
+  ids, explicitly allowed source refs, hashes, receipts, and limitations while
+  excluding raw source text, author names, local paths, private sessions, and bulk
+  comments.
+
 ## 0.2.0 - 2026-09-07
 
 - Adds deterministic corpus-salience theme labels with `label_quality` support metadata so weak and singleton labels are visible in the digest.

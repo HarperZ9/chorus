@@ -40,8 +40,14 @@ with provenance, chorus synthesizes the discourse on top of it.
   literal, no sarcasm) are stated in the digest itself.
 - **A daemon.** Point it at a watchlist and it re-synthesizes only when a corpus
   actually changes, storing each receipted digest by its own hash.
+- **A source-change decision.** Compare a current gather corpus against a
+  reference corpus and get a machine-readable decision: added, removed, changed,
+  unchanged, digest verification, disagreement outline, and typed source failure
+  states. The optional public projection is allowlisted and omits raw source text,
+  author names, local paths, private session content, and bulk comments. Source
+  URLs appear there only when a row explicitly marks them public-projectable.
 - **An MCP surface.** Drive it from any MCP host: `chorus.run`, `chorus.corpora`,
-  `chorus.digests`, `chorus.status`, `chorus.doctor`.
+  `chorus.digests`, `chorus.decision`, `chorus.status`, `chorus.doctor`.
 
 ## Release notes
 
@@ -54,6 +60,8 @@ pip install -e .
 
 chorus run examples/discourse-sample.json --verify   # try it on the bundled sample
 chorus run <corpus> --verify        # a corpus -> a verified discourse digest
+chorus decision <current> --reference <reference> --task "Check whether sources changed"
+chorus decision <current> --reference <reference> --public
 chorus corpora <root>               # discover gather corpora as discourse sources
 chorus watch add <corpus>           # add a corpus to the daemon watchlist
 chorus daemon --interval 300        # poll the watchlist, synthesize on change

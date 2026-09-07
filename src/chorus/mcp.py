@@ -2,9 +2,9 @@
 
 Exposes the discourse lens as MCP tools on the project-telos.flagship-action/v1
 envelope, mirroring the ecosystem's MCP shape: chorus.status, chorus.doctor,
-chorus.run (a corpus -> a verified digest), chorus.corpora (discover sources),
-chorus.digests (what the daemon has stored). The one verdict is a digest's own
-verify flag; status and doctor never render a verdict token.
+chorus.run (a corpus -> a verified digest), chorus.decision (current source pack
+-> reference source pack), chorus.corpora (discover sources), chorus.digests
+(what the daemon has stored). Status and doctor never render a verdict token.
 """
 from __future__ import annotations
 
@@ -53,7 +53,16 @@ def _tool_defs() -> list[dict]:
          "inputSchema": {"type": "object", "properties": {
              "store": {"type": "string", "description": "the daemon's digest store directory"},
              "limit": {"type": "integer"},
-         }, "required": ["store"]}},
+          }, "required": ["store"]}},
+        {"name": "chorus.decision",
+         "description": "Compare a current gather-style source pack against a reference pack and "
+                        "return a receipt-backed source-change decision.",
+         "inputSchema": {"type": "object", "properties": {
+             "current": {"type": "string", "description": "current gather corpus dir or JSON row list"},
+             "reference": {"type": "string", "description": "reference gather corpus dir or JSON row list"},
+             "task": {"type": "string", "description": "human-readable decision task"},
+             "public": {"type": "boolean", "description": "emit only the allowlisted public projection"},
+          }, "required": ["current", "reference"]}},
     ]
 
 
@@ -95,6 +104,15 @@ def call_tool(name: str, args: dict) -> str:
         recent = DigestStore(str(args.get("store", ""))).recent(int(limit) if isinstance(limit, int) else 20)
         return json.dumps({"store": str(args.get("store", "")), "digests": recent},
                           indent=2, ensure_ascii=False)
+    if name == "chorus.decision":
+        from chorus.decision import decision_from_paths
+        out = decision_from_paths(
+            str(args.get("current", "")),
+            str(args.get("reference", "")),
+            task=str(args.get("task", "Compare current sources against the reference.")),
+        )
+        body = out["public_projection"] if args.get("public") else out
+        return json.dumps(body, indent=2, sort_keys=True, ensure_ascii=False)
     raise ValueError(f"unknown tool: {name!r}")
 
 

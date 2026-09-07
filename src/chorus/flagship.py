@@ -14,7 +14,7 @@ from chorus import __version__
 
 SCHEMA = "project-telos.flagship-action/v1"
 TOOL = "chorus"
-PRIMARY_COMMANDS = ["run", "corpora", "daemon", "watch", "digests", "mcp"]
+PRIMARY_COMMANDS = ["run", "decision", "corpora", "daemon", "watch", "digests", "mcp"]
 
 
 def envelope(command: str, *, status: str = "OK", native: dict | None = None,
@@ -49,7 +49,7 @@ def status_payload() -> dict:
             "commands": PRIMARY_COMMANDS,
             "operator_commands": ["status", "doctor", "mcp"],
             "mcp_tools": ["chorus.status", "chorus.doctor", "chorus.run",
-                          "chorus.corpora", "chorus.digests"],
+                          "chorus.decision", "chorus.corpora", "chorus.digests"],
             "orbits": "gather (perceives the corpus; chorus synthesizes the discourse)",
         },
         next_actions=[_next("gather", "docs", "capture a comment corpus before synthesis")],
@@ -68,6 +68,7 @@ def doctor_payload() -> dict:
     checks = [
         {"name": "synthesis", "status": _capability("chorus.synthesize", "synthesize")},
         {"name": "receipt_verify", "status": _capability("chorus.receipt", "verify")},
+        {"name": "source_decision", "status": _capability("chorus.decision", "build_decision")},
         {"name": "corpus_discovery", "status": _capability("chorus.corpora", "list_corpora")},
         {"name": "daemon", "status": _capability("chorus.daemon", "tick")},
         {"name": "model_overlay", "status": _capability("chorus.sentiment", "model_pass")},
