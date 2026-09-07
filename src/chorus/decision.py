@@ -422,6 +422,22 @@ def _validate_source_rows(rows: list[dict], *, label: str) -> list[dict]:
             continue
         if row.get("kind") not in _DISCOURSE_ROW_KINDS:
             continue
+        item_id = row.get("id")
+        if item_id is None:
+            failures.append({
+                "code": f"missing_{label}_item_id",
+                "message": f"{label} row {row_number} has no id",
+            })
+        elif not isinstance(item_id, str):
+            failures.append({
+                "code": f"invalid_{label}_item_id",
+                "message": f"{label} row {row_number} id is not a string",
+            })
+        elif not item_id.strip():
+            failures.append({
+                "code": f"missing_{label}_item_id",
+                "message": f"{label} row {row_number} has empty id",
+            })
         text = row.get("text")
         if text is None:
             failures.append({

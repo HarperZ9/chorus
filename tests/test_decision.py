@@ -250,6 +250,80 @@ def test_gather_corpus_invalid_sha_without_text_is_typed_unverifiable(tmp_path):
     assert result["source_counts"]["reference_rows"] == 1
 
 
+def test_inline_null_item_id_is_typed_unverifiable_before_normalize():
+    result = build_decision(
+        [{"kind": "comment", "id": None, "ref": "claim", "text": "same source text", "meta": {"like_count": 1}}],
+        [{"kind": "comment", "id": "None", "ref": "claim", "text": "same source text", "meta": {"like_count": 1}}],
+        task="Detect null source identity before normalize can stringify it.",
+    )
+
+    assert result["status"] == "UNVERIFIABLE"
+    assert result["decision"] == "hold_for_source_repair"
+    assert [failure["code"] for failure in result["source_failures"]] == ["missing_current_item_id"]
+    assert result["source_counts"]["current_rows"] == 1
+    assert result["source_counts"]["reference_items"] == 1
+
+
+def test_inline_blank_item_id_is_typed_unverifiable_before_normalize():
+    result = build_decision(
+        [{"kind": "comment", "id": "  ", "ref": "claim", "text": "current source text", "meta": {"like_count": 1}}],
+        [{"kind": "comment", "id": "valid", "ref": "claim", "text": "reference source text", "meta": {"like_count": 1}}],
+        task="Detect blank source identity before normalize.",
+    )
+
+    assert result["status"] == "UNVERIFIABLE"
+    assert [failure["code"] for failure in result["source_failures"]] == ["missing_current_item_id"]
+
+
+def test_inline_non_string_item_ids_are_typed_unverifiable_before_normalize():
+    rows = [
+        (True, "invalid_current_item_id"),
+        (7, "invalid_current_item_id"),
+        (["row"], "invalid_current_item_id"),
+        ({"row": "id"}, "invalid_current_item_id"),
+    ]
+    for bad_id, expected_code in rows:
+        result = build_decision(
+            [{"kind": "comment", "id": bad_id, "ref": "claim", "text": "current source text", "meta": {"like_count": 1}}],
+            [{"kind": "comment", "id": "valid", "ref": "claim", "text": "reference source text", "meta": {"like_count": 1}}],
+            task="Detect non-string source identity before normalize.",
+        )
+
+        assert result["status"] == "UNVERIFIABLE"
+        assert [failure["code"] for failure in result["source_failures"]] == [expected_code]
+
+
+def test_gather_corpus_null_item_id_is_typed_unverifiable_before_normalize(tmp_path):
+    current = tmp_path / "current"
+    reference = tmp_path / "reference"
+    current.mkdir()
+    reference.mkdir()
+    text = "same source text"
+    sha = hashlib.sha256(text.encode("utf-8")).hexdigest()
+    for corpus in (current, reference):
+        obj = corpus / "objects" / sha[:2] / sha[2:]
+        obj.parent.mkdir(parents=True)
+        obj.write_text(text, encoding="utf-8")
+        (corpus / "catalog.jsonl").write_text(json.dumps({
+            "kind": "comment",
+            "id": None,
+            "ref": "claim",
+            "sha256": sha,
+            "meta": {"like_count": 1},
+        }) + "\n", encoding="utf-8")
+
+    result = decision_from_paths(str(current), str(reference), task="Detect null gather identity.")
+
+    assert result["status"] == "UNVERIFIABLE"
+    assert result["decision"] == "hold_for_source_repair"
+    assert [failure["code"] for failure in result["source_failures"]] == [
+        "missing_current_item_id",
+        "missing_reference_item_id",
+    ]
+    assert result["source_counts"]["current_rows"] == 1
+    assert result["source_counts"]["current_items"] == 1
+
+
 def test_gather_corpus_missing_content_object_is_typed_unverifiable(tmp_path):
     current = tmp_path / "current"
     reference = tmp_path / "reference"
