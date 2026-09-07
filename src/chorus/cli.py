@@ -124,6 +124,30 @@ def _cmd_digests(args) -> int:
     return 0
 
 
+def _cmd_decision(args) -> int:
+    from chorus.decision import decision_from_paths
+    public_projection_policy = None
+    if args.public_policy:
+        try:
+            with open(args.public_policy, encoding="utf-8") as f:
+                public_projection_policy = json.load(f)
+        except (json.JSONDecodeError, OSError) as exc:
+            print(f"chorus: could not read public projection policy {args.public_policy}: {exc}", file=sys.stderr)
+            return 1
+        if not isinstance(public_projection_policy, dict):
+            print("chorus: public projection policy JSON must be an object", file=sys.stderr)
+            return 1
+    out = decision_from_paths(
+        args.current,
+        args.reference,
+        task=args.task,
+        public_projection_policy=public_projection_policy,
+    )
+    body = out["public_projection"] if args.public else out
+    print(json.dumps(body, indent=2, sort_keys=True, ensure_ascii=False))
+    return 0 if out.get("ok") else 2
+
+
 def _cmd_daemon(args) -> int:
     import time
     from chorus.daemon import Watchlist, DigestStore, tick
@@ -182,6 +206,17 @@ def main(argv: list[str] | None = None) -> int:
     digests.add_argument("store", help="the daemon's digest store directory")
     digests.add_argument("--limit", type=int, default=20)
     digests.set_defaults(func=_cmd_digests)
+    decision = sub.add_parser("decision", help="run a source-change review gate")
+    decision.add_argument("current", help="current gather-style JSON row list or gather corpus directory")
+    decision.add_argument("--reference", required=True,
+                          help="reference gather-style JSON row list or gather corpus directory")
+    decision.add_argument("--task", default="Compare current sources against the reference.",
+                          help="human-readable source-review task")
+    decision.add_argument("--public", action="store_true",
+                          help="emit the safe public source-change projection")
+    decision.add_argument("--public-policy",
+                          help="operator-authored JSON policy for public ids, source names, refs, and URLs")
+    decision.set_defaults(func=_cmd_decision)
     mcp = sub.add_parser("mcp", help="run the chorus MCP stdio server")
     mcp.set_defaults(func=_cmd_mcp)
     args = parser.parse_args(argv)

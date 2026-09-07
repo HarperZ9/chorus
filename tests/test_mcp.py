@@ -20,7 +20,14 @@ def test_initialize_names_the_server():
 
 def test_tools_list_exposes_the_surface():
     names = {t["name"] for t in _tool_defs()}
-    assert {"chorus.status", "chorus.doctor", "chorus.run", "chorus.corpora", "chorus.digests"} <= names
+    assert {
+        "chorus.status",
+        "chorus.doctor",
+        "chorus.run",
+        "chorus.corpora",
+        "chorus.digests",
+        "chorus.decision",
+    } <= names
     resp = handle_request({"jsonrpc": "2.0", "id": 1, "method": "tools/list"})
     assert resp["result"]["tools"]
 
@@ -73,6 +80,48 @@ def test_corpora_and_digests_tools(tmp_path):
     tick(Watchlist([str(itemsfile)]), store, clock=lambda: 1.0)
     digests = json.loads(call_tool("chorus.digests", {"store": str(tmp_path / "store")}))
     assert digests["digests"]
+
+
+def test_decision_tool_returns_source_change_result(tmp_path):
+    reference = tmp_path / "reference.json"
+    current = tmp_path / "current.json"
+    reference.write_text(json.dumps([
+        {"kind": "comment", "id": "same", "ref": "workflow", "text": "the reference source is stable",
+         "meta": {"like_count": 5}},
+    ]), encoding="utf-8")
+    current.write_text(json.dumps([
+        {"kind": "comment", "id": "same", "ref": "workflow", "text": "the current source changed",
+         "meta": {"like_count": 5}},
+    ]), encoding="utf-8")
+
+    out = json.loads(call_tool("chorus.decision", {
+        "current": str(current),
+        "reference": str(reference),
+        "task": "Check whether source evidence changed.",
+    }))
+
+    assert out["schema"] == "chorus.source-decision/v1"
+    assert out["status"] == "DRIFT"
+    assert out["changes"]["counts"] == {"added": 0, "removed": 0, "changed": 1, "unchanged": 0}
+
+
+def test_decision_tool_missing_source_is_typed_result_not_protocol_error(tmp_path):
+    reference = tmp_path / "reference.json"
+    reference.write_text(json.dumps([
+        {"kind": "comment", "id": "same", "ref": "workflow", "text": "reference source",
+         "meta": {"like_count": 1}},
+    ]), encoding="utf-8")
+
+    result = _call("chorus.decision", {
+        "current": str(tmp_path / "missing.json"),
+        "reference": str(reference),
+        "task": "Check missing source handling.",
+    })
+    out = json.loads(result["content"][0]["text"])
+
+    assert result["isError"] is False
+    assert out["status"] == "UNVERIFIABLE"
+    assert out["source_failures"][0]["code"] == "missing_current"
 
 
 def test_unknown_tool_is_an_error():

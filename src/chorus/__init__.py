@@ -6,5 +6,5 @@ accept gate. Stdlib only; deterministic; every digest carries a receipt.
 """
 from chorus.item import DiscourseItem, normalize
 
-__version__ = "0.2.0"
+__version__ = "0.3.0"
 __all__ = ["DiscourseItem", "normalize"]

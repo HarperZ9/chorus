@@ -40,12 +40,21 @@ with provenance, chorus synthesizes the discourse on top of it.
   literal, no sarcasm) are stated in the digest itself.
 - **A daemon.** Point it at a watchlist and it re-synthesizes only when a corpus
   actually changes, storing each receipted digest by its own hash.
+- **A source-change review gate.** Compare a current gather corpus against a
+  reference corpus before reusing a prior synthesis or release note. The result
+  reports added, removed, changed, unchanged, digest verification, a local digest
+  outline, and typed source failure states. The optional public projection is
+  safe by default as hashes and counts. Human-readable public ids, source names,
+  refs, and URLs require an operator-authored `--public-policy` sidecar; raw
+  source row metadata cannot authorize public output. The projection omits raw
+  source text, author names, local paths, private session content, and bulk
+  comments. Source URLs appear there only through that public-policy sidecar.
 - **An MCP surface.** Drive it from any MCP host: `chorus.run`, `chorus.corpora`,
-  `chorus.digests`, `chorus.status`, `chorus.doctor`.
+  `chorus.digests`, `chorus.decision`, `chorus.status`, `chorus.doctor`.
 
 ## Release notes
 
-See [CHANGELOG.md](CHANGELOG.md). Version 0.2.0 writes `chorus-lens/3` receipts with label-support metadata while preserving historical `chorus-lens/2` verification through an explicit legacy path. v2 receipts do not bind the current v3-only label terms or `label_quality` fields.
+See [CHANGELOG.md](CHANGELOG.md). Version 0.3.0 adds `chorus decision` and MCP `chorus.decision` as a source-change review gate for deciding whether a prior synthesis or release note can reuse the same source observations, needs source review, or must hold for source repair. It does not decide whether a source claim is true, complete, or ready for publication. Version 0.2.0 writes `chorus-lens/3` receipts with label-support metadata while preserving historical `chorus-lens/2` verification through an explicit legacy path. v2 receipts do not bind the current v3-only label terms or `label_quality` fields.
 
 ## Run it
 
@@ -54,6 +63,8 @@ pip install -e .
 
 chorus run examples/discourse-sample.json --verify   # try it on the bundled sample
 chorus run <corpus> --verify        # a corpus -> a verified discourse digest
+chorus decision <current> --reference <reference> --task "Check whether sources changed"
+chorus decision <current> --reference <reference> --public --public-policy public-policy.json
 chorus corpora <root>               # discover gather corpora as discourse sources
 chorus watch add <corpus>           # add a corpus to the daemon watchlist
 chorus daemon --interval 300        # poll the watchlist, synthesize on change
