@@ -2,8 +2,8 @@
 
 This module compares two already-gathered source packs. It does not fetch or
 publish anything. The public projection is intentionally narrow: change counts,
-hashes, and explicitly allowlisted public metadata only, with no raw source text
-or arbitrary local identifiers.
+hashes, and operator-policy allowlisted public metadata only, with no raw
+source text or arbitrary local identifiers.
 """
 from __future__ import annotations
 
@@ -23,6 +23,7 @@ SCHEMA = "chorus.source-decision/v1"
 PUBLIC_SCHEMA = "chorus.public-source-decision/v1"
 METHOD_VERSION = "chorus-source-decision/1"
 _SHA256 = re.compile(r"[0-9a-f]{64}")
+_DISCOURSE_ROW_KINDS = {"comment", "feed_item", "post", "reply"}
 
 
 class SourceReadError(Exception):
@@ -94,10 +95,18 @@ def _load_corpus_dir(path: str, *, label: str) -> list[dict]:
                         items_read=items_read,
                     )
                 rows_read += 1
-                if row.get("kind") == "comment":
+                if row.get("kind") in _DISCOURSE_ROW_KINDS:
                     items_read += 1
-                    sha = row.get("sha256", "")
-                    if _SHA256.fullmatch(sha):
+                    sha = row.get("sha256")
+                    if isinstance(sha, str) and sha:
+                        if not _SHA256.fullmatch(sha):
+                            raise SourceReadError(
+                                f"invalid_{label}_object_hash",
+                                f"{label} catalog.jsonl line {line_number} has an invalid sha256",
+                                path=cat,
+                                rows_read=rows_read,
+                                items_read=items_read,
+                            )
                         obj = os.path.join(path, "objects", sha[:2], sha[2:])
                         if not os.path.exists(obj):
                             raise SourceReadError(
@@ -128,6 +137,14 @@ def _load_corpus_dir(path: str, *, label: str) -> list[dict]:
                                 rows_read=rows_read,
                                 items_read=items_read,
                             )
+                    elif not isinstance(row.get("text"), str) or not row.get("text", "").strip():
+                        raise SourceReadError(
+                            f"missing_{label}_text",
+                            f"{label} catalog.jsonl line {line_number} has no text or content object",
+                            path=cat,
+                            rows_read=rows_read,
+                            items_read=items_read,
+                        )
                 rows.append(row)
     except OSError as exc:
         raise SourceReadError(
@@ -146,10 +163,6 @@ def _public_url(item: DiscourseItem) -> str | None:
         if isinstance(value, str) and value.strip().lower().startswith(("http://", "https://")):
             return value.strip()
     return None
-
-
-def _source_url_allowed(item: DiscourseItem) -> bool:
-    return item.meta.get("public_projection_url_allowed") is True or item.meta.get("public_url_allowed") is True
 
 
 _SAFE_PUBLIC_VALUE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}")
@@ -179,20 +192,44 @@ def _safe_public_url(value: object) -> str | None:
     return clean if len(clean) <= 2048 else None
 
 
-def _public_metadata(item: DiscourseItem) -> dict:
-    meta = item.meta
+def _public_policy_info(public_projection_policy: dict | None) -> dict:
+    policy = public_projection_policy if isinstance(public_projection_policy, dict) else {}
+    return {"provided": bool(policy), "sha256": _sha(policy)}
+
+
+def _policy_entries(row: dict, public_projection_policy: dict | None) -> list[dict]:
+    if not isinstance(public_projection_policy, dict):
+        return []
+    entries: list[dict] = []
+    for section, key in (
+        ("items", row.get("id")),
+        ("ids", row.get("id")),
+        ("text_sha256", row.get("text_sha256")),
+        ("item_sha256", row.get("item_sha256")),
+    ):
+        mapping = public_projection_policy.get(section)
+        if not isinstance(mapping, dict) or not isinstance(key, str):
+            continue
+        entry = mapping.get(key)
+        if isinstance(entry, dict):
+            entries.append(entry)
+    return entries
+
+
+def _public_metadata(row: dict, public_projection_policy: dict | None) -> dict:
+    policy_meta: dict[str, Any] = {}
+    for entry in _policy_entries(row, public_projection_policy):
+        policy_meta.update(entry)
     out: dict[str, str] = {}
-    for public_key, candidates in {
-        "id": ("public_projection_id", "public_id"),
-        "source": ("public_projection_source", "public_source"),
-        "responds_to": ("public_projection_responds_to", "public_responds_to"),
-    }.items():
-        for candidate in candidates:
-            value = _safe_public_value(meta.get(candidate))
-            if value:
-                out[public_key] = value
-                break
-    url = _safe_public_url(_public_url(item)) if _source_url_allowed(item) else None
+    for public_key in ("id", "source", "responds_to"):
+        value = _safe_public_value(policy_meta.get(public_key))
+        if value:
+            out[public_key] = value
+    url = (
+        _safe_public_url(policy_meta.get("source_url"))
+        or _safe_public_url(policy_meta.get("url"))
+        or _safe_public_url(policy_meta.get("permalink"))
+    )
     if url:
         out["source_url"] = url
     return out
@@ -218,8 +255,6 @@ def _fingerprint(item: DiscourseItem) -> dict:
         "text_sha256": _text_sha(item.text),
     }
     body["item_sha256"] = _sha(body)
-    body["source_url_allowed"] = _source_url_allowed(item)
-    body["public"] = _public_metadata(item)
     return body
 
 
@@ -250,8 +285,6 @@ def _change_entry(snapshot: dict) -> dict:
         "source": snapshot["source"],
         "responds_to": snapshot["responds_to"],
         "source_url": snapshot.get("source_url"),
-        "source_url_allowed": bool(snapshot.get("source_url_allowed")),
-        "public": dict(snapshot.get("public") or {}),
         "text_sha256": snapshot["text_sha256"],
         "item_sha256": snapshot["item_sha256"],
     }
@@ -286,9 +319,9 @@ def _digest_outline(digest: dict) -> dict:
     }
 
 
-def _public_ref(row: dict) -> dict:
+def _public_ref(row: dict, public_projection_policy: dict | None) -> dict:
     return {
-        "public": dict(row.get("public") or {}),
+        "public": _public_metadata(row, public_projection_policy),
         "text_sha256": row["text_sha256"],
         "item_sha256": row["item_sha256"],
     }
@@ -309,7 +342,7 @@ def _public_receipt(receipt: dict | None) -> dict | None:
     }
 
 
-def _public_projection(result: dict) -> dict:
+def _public_projection(result: dict, public_projection_policy: dict | None = None) -> dict:
     changes = result.get("changes", {})
     return {
         "schema": PUBLIC_SCHEMA,
@@ -320,18 +353,19 @@ def _public_projection(result: dict) -> dict:
         "source_counts": result.get("source_counts", {}),
         "changes": {
             "counts": changes.get("counts", {"added": 0, "removed": 0, "changed": 0, "unchanged": 0}),
-            "added": [_public_ref(row) for row in changes.get("added", [])],
-            "removed": [_public_ref(row) for row in changes.get("removed", [])],
+            "added": [_public_ref(row, public_projection_policy) for row in changes.get("added", [])],
+            "removed": [_public_ref(row, public_projection_policy) for row in changes.get("removed", [])],
             "changed": [
                 {
                     "changed_fields": row["changed_fields"],
-                    "current": _public_ref(row["current"]),
-                    "reference": _public_ref(row["reference"]),
+                    "current": _public_ref(row["current"], public_projection_policy),
+                    "reference": _public_ref(row["reference"], public_projection_policy),
                 }
                 for row in changes.get("changed", [])
             ],
         },
         "checks": result.get("checks", {}),
+        "public_projection_policy": result.get("public_projection_policy", _public_policy_info(public_projection_policy)),
         "source_failures": [
             {"code": failure["code"], "message": "Source failure; inspect the local result."}
             for failure in result.get("source_failures", [])
@@ -345,8 +379,14 @@ def _public_projection(result: dict) -> dict:
     }
 
 
-def _failure_result(task: str, failures: list[dict], *, current_path: str | None = None,
-                    reference_path: str | None = None) -> dict:
+def _failure_result(
+    task: str,
+    failures: list[dict],
+    *,
+    current_path: str | None = None,
+    reference_path: str | None = None,
+    public_projection_policy: dict | None = None,
+) -> dict:
     result = {
         "schema": SCHEMA,
         "ok": False,
@@ -361,19 +401,73 @@ def _failure_result(task: str, failures: list[dict], *, current_path: str | None
         "source_failures": failures,
         "human_summary": "Source comparison is unverifiable; repair the listed source failure before using it.",
         "receipt": None,
+        "public_projection_policy": _public_policy_info(public_projection_policy),
     }
-    result["public_projection"] = _public_projection(result)
+    result["public_projection"] = _public_projection(result, public_projection_policy)
     return result
 
 
-def build_decision(current_rows: list[dict], reference_rows: list[dict], *, task: str = "") -> dict:
+def _count_discourse_rows(rows: list[dict]) -> int:
+    return sum(1 for row in rows if isinstance(row, dict) and row.get("kind") in _DISCOURSE_ROW_KINDS)
+
+
+def _validate_source_rows(rows: list[dict], *, label: str) -> list[dict]:
+    failures: list[dict] = []
+    for row_number, row in enumerate(rows, start=1):
+        if not isinstance(row, dict):
+            failures.append({
+                "code": f"invalid_{label}_row",
+                "message": f"{label} row {row_number} is not an object",
+            })
+            continue
+        if row.get("kind") not in _DISCOURSE_ROW_KINDS:
+            continue
+        text = row.get("text")
+        if text is None:
+            failures.append({
+                "code": f"missing_{label}_text",
+                "message": f"{label} row {row_number} has no text",
+            })
+        elif not isinstance(text, str):
+            failures.append({
+                "code": f"invalid_{label}_text",
+                "message": f"{label} row {row_number} text is not a string",
+            })
+        elif not text.strip():
+            failures.append({
+                "code": f"missing_{label}_text",
+                "message": f"{label} row {row_number} has empty text",
+            })
+    return failures
+
+
+def build_decision(
+    current_rows: list[dict],
+    reference_rows: list[dict],
+    *,
+    task: str = "",
+    public_projection_policy: dict | None = None,
+) -> dict:
     failures: list[dict] = []
     if not isinstance(current_rows, list):
         failures.append({"code": "invalid_current_shape", "message": "current source must be a list of rows"})
     if not isinstance(reference_rows, list):
         failures.append({"code": "invalid_reference_shape", "message": "reference source must be a list of rows"})
     if failures:
-        return _failure_result(task, failures)
+        return _failure_result(task, failures, public_projection_policy=public_projection_policy)
+
+    failures.extend(_validate_source_rows(current_rows, label="current"))
+    failures.extend(_validate_source_rows(reference_rows, label="reference"))
+    if failures:
+        result = _failure_result(task, failures, public_projection_policy=public_projection_policy)
+        result["source_counts"] = {
+            "current_rows": len(current_rows),
+            "reference_rows": len(reference_rows),
+            "current_items": _count_discourse_rows(current_rows),
+            "reference_items": _count_discourse_rows(reference_rows),
+        }
+        result["public_projection"] = _public_projection(result, public_projection_policy)
+        return result
 
     current_items = normalize(current_rows)
     reference_items = normalize(reference_rows)
@@ -387,14 +481,14 @@ def build_decision(current_rows: list[dict], reference_rows: list[dict], *, task
     failures.extend(current_failures)
     failures.extend(reference_failures)
     if failures:
-        result = _failure_result(task, failures)
+        result = _failure_result(task, failures, public_projection_policy=public_projection_policy)
         result["source_counts"] = {
             "current_rows": len(current_rows),
             "reference_rows": len(reference_rows),
             "current_items": len(current_items),
             "reference_items": len(reference_items),
         }
-        result["public_projection"] = _public_projection(result)
+        result["public_projection"] = _public_projection(result, public_projection_policy)
         return result
 
     current_scored = score(current_items)
@@ -468,17 +562,24 @@ def build_decision(current_rows: list[dict], reference_rows: list[dict], *, task
         },
         "source_failures": [],
         "receipt": receipt,
+        "public_projection_policy": _public_policy_info(public_projection_policy),
         "human_summary": (
             f"Source comparison detected {len(added)} added, {len(removed)} removed, "
             f"and {len(changed)} changed item(s) across {len(current_ids | reference_ids)} comparable ids; "
             f"{'review current sources before reusing the prior decision.' if status == 'DRIFT' else 'no source drift was detected.'}"
         ),
     }
-    result["public_projection"] = _public_projection(result)
+    result["public_projection"] = _public_projection(result, public_projection_policy)
     return result
 
 
-def decision_from_paths(current: str, reference: str, *, task: str = "") -> dict:
+def decision_from_paths(
+    current: str,
+    reference: str,
+    *,
+    task: str = "",
+    public_projection_policy: dict | None = None,
+) -> dict:
     failures: list[dict] = []
     current_rows: list[dict] | None = None
     reference_rows: list[dict] | None = None
@@ -498,23 +599,34 @@ def decision_from_paths(current: str, reference: str, *, task: str = "") -> dict
         else:
             reference_rows = rows
     if failures:
-        result = _failure_result(task, failures, current_path=current, reference_path=reference)
-        current_items = normalize(current_rows) if isinstance(current_rows, list) else []
-        reference_items = normalize(reference_rows) if isinstance(reference_rows, list) else []
+        result = _failure_result(
+            task,
+            failures,
+            current_path=current,
+            reference_path=reference,
+            public_projection_policy=public_projection_policy,
+        )
+        current_items = _count_discourse_rows(current_rows) if isinstance(current_rows, list) else 0
+        reference_items = _count_discourse_rows(reference_rows) if isinstance(reference_rows, list) else 0
         result["source_counts"] = {
             "current_rows": len(current_rows) if isinstance(current_rows, list) else known_counts.get("current", (0, 0))[0],
             "reference_rows": (
                 len(reference_rows) if isinstance(reference_rows, list) else known_counts.get("reference", (0, 0))[0]
             ),
-            "current_items": len(current_items) if isinstance(current_rows, list) else known_counts.get("current", (0, 0))[1],
+            "current_items": current_items if isinstance(current_rows, list) else known_counts.get("current", (0, 0))[1],
             "reference_items": (
-                len(reference_items) if isinstance(reference_rows, list) else known_counts.get("reference", (0, 0))[1]
+                reference_items if isinstance(reference_rows, list) else known_counts.get("reference", (0, 0))[1]
             ),
         }
-        result["public_projection"] = _public_projection(result)
+        result["public_projection"] = _public_projection(result, public_projection_policy)
         return result
     assert current_rows is not None and reference_rows is not None
-    result = build_decision(current_rows, reference_rows, task=task)
+    result = build_decision(
+        current_rows,
+        reference_rows,
+        task=task,
+        public_projection_policy=public_projection_policy,
+    )
     result["inputs"] = {"current": current, "reference": reference}
-    result["public_projection"] = _public_projection(result)
+    result["public_projection"] = _public_projection(result, public_projection_policy)
     return result

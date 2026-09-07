@@ -44,9 +44,11 @@ with provenance, chorus synthesizes the discourse on top of it.
   reference corpus before reusing a prior synthesis or release note. The result
   reports added, removed, changed, unchanged, digest verification, a local digest
   outline, and typed source failure states. The optional public projection is
-  allowlisted and omits raw source text,
-  author names, local paths, private session content, and bulk comments. Source
-  URLs appear there only when a row explicitly marks them public-projectable.
+  safe by default as hashes and counts. Human-readable public ids, source names,
+  refs, and URLs require an operator-authored `--public-policy` sidecar; raw
+  source row metadata cannot authorize public output. The projection omits raw
+  source text, author names, local paths, private session content, and bulk
+  comments. Source URLs appear there only through that public-policy sidecar.
 - **An MCP surface.** Drive it from any MCP host: `chorus.run`, `chorus.corpora`,
   `chorus.digests`, `chorus.decision`, `chorus.status`, `chorus.doctor`.
 
@@ -62,7 +64,7 @@ pip install -e .
 chorus run examples/discourse-sample.json --verify   # try it on the bundled sample
 chorus run <corpus> --verify        # a corpus -> a verified discourse digest
 chorus decision <current> --reference <reference> --task "Check whether sources changed"
-chorus decision <current> --reference <reference> --public
+chorus decision <current> --reference <reference> --public --public-policy public-policy.json
 chorus corpora <root>               # discover gather corpora as discourse sources
 chorus watch add <corpus>           # add a corpus to the daemon watchlist
 chorus daemon --interval 300        # poll the watchlist, synthesize on change

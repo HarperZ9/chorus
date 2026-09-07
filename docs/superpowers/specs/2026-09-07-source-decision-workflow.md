@@ -42,10 +42,11 @@ The result reports:
   missing ids, or duplicate ids.
 
 `--public` and MCP argument `public: true` return
-`chorus.public-source-decision/v1`, an allowlisted projection with ids, counts,
-hashes, receipt, checks, and limitations only. Source URLs are included only when
-the row metadata explicitly sets `public_projection_url_allowed: true` or
-`public_url_allowed: true`.
+`chorus.public-source-decision/v1`, a safe default projection with counts,
+hashes, receipt, checks, and limitations only. Human-readable public ids, source
+names, refs, and source URLs require a separate operator-authored projection
+policy. Raw source rows and Gather-derived metadata cannot self-authorize public
+output.
 
 ## Non-goals and boundaries
 
@@ -54,7 +55,8 @@ the row metadata explicitly sets `public_projection_url_allowed: true` or
 - Does not expose raw source text, author names, local paths, private sessions,
   or bulk comments in the public projection.
 - Does not treat `http(s)` URLs as automatically public. Public projection of a
-  source URL requires an explicit row-level allowlist flag.
+  source URL requires an operator-owned policy, not source-controlled row
+  metadata.
 - Does not claim completeness. `MATCH` means compared item ids and fingerprints
   matched; it does not prove no relevant source exists elsewhere.
 - Does not decide product readiness by itself. `DRIFT` means review the changed
@@ -71,3 +73,9 @@ the row metadata explicitly sets `public_projection_url_allowed: true` or
   `UNVERIFIABLE`, not a traceback or protocol failure.
 - Public-projection control: raw source text from both current and reference rows
   is absent from the public JSON result.
+- Malformed-row controls: inline discourse rows with missing, non-string, or empty
+  text return typed `UNVERIFIABLE`; corpus-dir rows with invalid content hashes
+  or missing content objects return typed `UNVERIFIABLE`.
+- Projection-policy control: raw source row metadata cannot publish ids, source
+  names, refs, or URLs. Public human fields require an operator-authored policy
+  and safe-value validation.

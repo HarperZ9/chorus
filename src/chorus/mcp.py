@@ -61,7 +61,11 @@ def _tool_defs() -> list[dict]:
              "current": {"type": "string", "description": "current gather corpus dir or JSON row list"},
              "reference": {"type": "string", "description": "reference gather corpus dir or JSON row list"},
              "task": {"type": "string", "description": "human-readable source-review task"},
-             "public": {"type": "boolean", "description": "emit only the allowlisted public projection"},
+             "public": {"type": "boolean", "description": "emit the safe public projection"},
+             "public_policy": {
+                 "type": "object",
+                 "description": "operator-authored policy for public ids, source names, refs, and URLs",
+             },
           }, "required": ["current", "reference"]}},
     ]
 
@@ -110,6 +114,7 @@ def call_tool(name: str, args: dict) -> str:
             str(args.get("current", "")),
             str(args.get("reference", "")),
             task=str(args.get("task", "Compare current sources against the reference.")),
+            public_projection_policy=args.get("public_policy") if isinstance(args.get("public_policy"), dict) else None,
         )
         body = out["public_projection"] if args.get("public") else out
         return json.dumps(body, indent=2, sort_keys=True, ensure_ascii=False)

@@ -7,10 +7,11 @@
   added/removed/changed/unchanged item ids, verifies both deterministic Chorus
   digests, and returns typed `UNVERIFIABLE` failure states for missing, malformed,
   empty, or ambiguous source inputs.
-- Adds an allowlisted public projection for the review-gate result. It keeps counts,
-  ids, explicitly allowed source refs, hashes, receipts, and limitations while
-  excluding raw source text, author names, local paths, private sessions, and bulk
-  comments.
+- Adds an allowlisted public projection for the review-gate result. It keeps
+  counts, hashes, receipts, and limitations by default; human-readable public
+  ids, source names, refs, and URLs require an operator-authored projection
+  policy rather than source-row metadata. It excludes raw source text, author
+  names, local paths, private sessions, and bulk comments.
 
 ## 0.2.0 - 2026-09-07
 

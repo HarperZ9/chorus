@@ -85,36 +85,46 @@ def test_source_decision_reports_added_removed_and_changed_items_without_public_
     assert result["public_projection"]["changes"]["counts"]["changed"] == 1
 
 
-def test_public_projection_includes_source_url_only_when_explicitly_allowed():
+def test_operator_public_projection_policy_can_publish_safe_values():
     result = build_decision(
         [
             {
                 "kind": "comment",
-                "id": "same-id",
+                "id": "added-id",
                 "ref": "workflow",
-                "text": "changed source",
-                "meta": {
-                    "like_count": 1,
-                    "source_url": "https://example.test/comments/same-id",
-                    "public_projection_url_allowed": True,
-                },
+                "text": "new official source observation",
+                "meta": {"like_count": 1, "source_url": "https://example.test/comments/added-id"},
             }
         ],
         [
             {
                 "kind": "comment",
-                "id": "same-id",
+                "id": "kept-id",
                 "ref": "workflow",
                 "text": "reference source",
-                "meta": {"like_count": 1, "source_url": "https://example.test/comments/same-id"},
+                "meta": {"like_count": 1, "source_url": "https://example.test/comments/kept-id"},
             }
         ],
         task="Project only explicitly allowlisted source URLs.",
+        public_projection_policy={
+            "items": {
+                "added-id": {
+                    "id": "added-public",
+                    "source": "official-doc",
+                    "responds_to": "source-review-gate",
+                    "source_url": "https://example.test/comments/added-id",
+                }
+            }
+        },
     )
 
-    public = result["public_projection"]["changes"]["changed"][0]
-    assert public["current"]["public"]["source_url"] == "https://example.test/comments/same-id"
-    assert "source_url" not in public["reference"].get("public", {})
+    public = result["public_projection"]["changes"]["added"][0]
+    assert public["public"] == {
+        "id": "added-public",
+        "source": "official-doc",
+        "responds_to": "source-review-gate",
+        "source_url": "https://example.test/comments/added-id",
+    }
 
 
 def test_public_projection_omits_unallowlisted_task_ids_sources_and_refs():
@@ -153,13 +163,91 @@ def test_public_projection_omits_unallowlisted_task_ids_sources_and_refs():
     assert "private-current" not in rendered
     assert public["task_sha256"]
     assert "task" not in public
-    assert public["changes"]["removed"][0]["public"] == {
-        "id": "safe-reference-id",
-        "source": "official-doc",
-        "responds_to": "source-reuse-gate",
-        "source_url": "https://example.test/reference",
-    }
+    assert public["changes"]["removed"][0]["public"] == {}
     assert public["changes"]["added"][0]["public"] == {}
+
+
+def test_source_row_public_metadata_does_not_authorize_public_projection():
+    result = build_decision(
+        [
+            {
+                "kind": "comment",
+                "id": "source-controlled-id",
+                "ref": "workflow",
+                "text": "new source-controlled row",
+                "meta": {
+                    "like_count": 1,
+                    "public_projection_id": "source-controlled-public-id",
+                    "public_projection_source": "source-controlled-public-source",
+                    "public_projection_responds_to": "source-controlled-public-ref",
+                    "source_url": "https://example.test/source-controlled",
+                    "public_projection_url_allowed": True,
+                },
+            }
+        ],
+        [
+            {
+                "kind": "comment",
+                "id": "reference-id",
+                "ref": "workflow",
+                "text": "reference source row",
+                "meta": {"like_count": 1},
+            }
+        ],
+        task="Source row metadata is untrusted for public projection.",
+    )
+
+    public = result["public_projection"]
+    rendered = json.dumps(public, ensure_ascii=False)
+    assert "source-controlled-public-id" not in rendered
+    assert "source-controlled-public-source" not in rendered
+    assert "source-controlled-public-ref" not in rendered
+    assert "https://example.test/source-controlled" not in rendered
+    assert public["changes"]["added"][0]["public"] == {}
+
+
+def test_inline_comment_rows_without_text_are_typed_unverifiable():
+    result = build_decision(
+        [{"kind": "comment", "id": "current-row", "ref": "claim", "meta": {"like_count": 1}}],
+        [{"kind": "comment", "id": "reference-row", "ref": "claim", "meta": {"like_count": 1}}],
+        task="Detect missing inline text.",
+    )
+
+    assert result["status"] == "UNVERIFIABLE"
+    assert result["decision"] == "hold_for_source_repair"
+    assert [failure["code"] for failure in result["source_failures"]] == [
+        "missing_current_text",
+        "missing_reference_text",
+    ]
+    assert result["source_counts"]["current_rows"] == 1
+    assert result["source_counts"]["current_items"] == 1
+
+
+def test_gather_corpus_invalid_sha_without_text_is_typed_unverifiable(tmp_path):
+    current = tmp_path / "current"
+    reference = tmp_path / "reference"
+    current.mkdir()
+    reference.mkdir()
+    row = {
+        "kind": "comment",
+        "id": "source-row",
+        "ref": "claim",
+        "sha256": "not-a-sha",
+        "meta": {"like_count": 1},
+    }
+    for corpus in (current, reference):
+        (corpus / "catalog.jsonl").write_text(json.dumps(row) + "\n", encoding="utf-8")
+
+    result = decision_from_paths(str(current), str(reference), task="Detect malformed gather catalog rows.")
+
+    assert result["status"] == "UNVERIFIABLE"
+    assert result["decision"] == "hold_for_source_repair"
+    assert [failure["code"] for failure in result["source_failures"]] == [
+        "invalid_current_object_hash",
+        "invalid_reference_object_hash",
+    ]
+    assert result["source_counts"]["current_rows"] == 1
+    assert result["source_counts"]["reference_rows"] == 1
 
 
 def test_gather_corpus_missing_content_object_is_typed_unverifiable(tmp_path):

@@ -97,3 +97,54 @@ def test_decision_command_can_emit_public_projection_without_raw_text(tmp_path, 
     assert out["status"] == "DRIFT"
     assert "private baseline sentence" not in rendered
     assert "private changed sentence" not in rendered
+
+
+def test_decision_command_uses_operator_public_policy_not_row_metadata(tmp_path, capsys):
+    reference = tmp_path / "reference.json"
+    current = tmp_path / "current.json"
+    policy = tmp_path / "public-policy.json"
+    reference.write_text(json.dumps([
+        {"kind": "comment", "id": "old", "ref": "workflow", "text": "older source row",
+         "meta": {"like_count": 1}},
+    ]), encoding="utf-8")
+    current.write_text(json.dumps([
+        {"kind": "comment", "id": "new", "ref": "workflow", "text": "new source row",
+         "meta": {
+             "like_count": 2,
+             "public_projection_id": "source-controlled-public-id",
+             "source_url": "https://example.test/source-controlled",
+             "public_projection_url_allowed": True,
+         }},
+    ]), encoding="utf-8")
+    policy.write_text(json.dumps({
+        "items": {
+            "new": {
+                "id": "operator-public-id",
+                "source": "official-doc",
+                "responds_to": "source-review-gate",
+                "source_url": "https://example.test/operator-public",
+            }
+        }
+    }), encoding="utf-8")
+
+    assert main([
+        "decision",
+        str(current),
+        "--reference",
+        str(reference),
+        "--task",
+        "Publish policy-selected source refs.",
+        "--public",
+        "--public-policy",
+        str(policy),
+    ]) == 0
+    out = json.loads(capsys.readouterr().out)
+    rendered = json.dumps(out, ensure_ascii=False)
+    assert out["changes"]["added"][0]["public"] == {
+        "id": "operator-public-id",
+        "source": "official-doc",
+        "responds_to": "source-review-gate",
+        "source_url": "https://example.test/operator-public",
+    }
+    assert "source-controlled-public-id" not in rendered
+    assert "https://example.test/source-controlled" not in rendered
