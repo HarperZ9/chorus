@@ -1,4 +1,4 @@
-# Chorus source-change decision workflow
+# Chorus source-change review gate
 
 - Date: 2026-09-07
 - Status: implemented on a feature branch
@@ -8,14 +8,14 @@
 ## Problem
 
 A release or research operator often has two source packs: a reference pack that
-previously supported a decision, and a current pack that may have changed. A
-plain digest says what the current discourse looks like, but it does not answer
-whether the evidence set itself changed enough to review before publishing or
-shipping.
+previously supported a synthesis or release note, and a current pack that may
+have changed. A plain digest says what the current discourse looks like, but it
+does not answer whether the evidence set itself changed enough to review before
+publishing or shipping.
 
-The workflow should turn an ordinary source comparison into a useful artifact:
-task, source packs, deterministic checks, disagreement outline, change counts,
-and a bounded public projection.
+The workflow should turn an ordinary source comparison into a useful review-gate
+artifact: task, source packs, deterministic checks, digest outline, change
+counts, and a bounded public projection.
 
 ## Existing seams used
 
@@ -37,8 +37,7 @@ The result reports:
 - Added, removed, changed, and unchanged item ids.
 - Text and item hashes for changed source rows, not raw source text.
 - Verification status and input hashes for both current and reference digests.
-- A local disagreement outline derived from the same deterministic Chorus digest
-  path.
+- A local digest outline derived from the same deterministic Chorus path.
 - Typed source failures such as missing path, malformed JSON, empty discourse,
   missing ids, or duplicate ids.
 
@@ -59,7 +58,7 @@ the row metadata explicitly sets `public_projection_url_allowed: true` or
 - Does not claim completeness. `MATCH` means compared item ids and fingerprints
   matched; it does not prove no relevant source exists elsewhere.
 - Does not decide product readiness by itself. `DRIFT` means review the changed
-  evidence before using the old decision.
+  evidence before reusing the old synthesis or release note.
 
 ## Acceptance controls
 

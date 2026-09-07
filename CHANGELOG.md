@@ -2,12 +2,12 @@
 
 ## Unreleased
 
-- Adds `chorus decision` and MCP `chorus.decision`, a source-to-decision workflow
+- Adds `chorus decision` and MCP `chorus.decision`, a source-change review gate
   that compares current and reference gather-style source packs, reports
   added/removed/changed/unchanged item ids, verifies both deterministic Chorus
   digests, and returns typed `UNVERIFIABLE` failure states for missing, malformed,
   empty, or ambiguous source inputs.
-- Adds an allowlisted public projection for the decision result. It keeps counts,
+- Adds an allowlisted public projection for the review-gate result. It keeps counts,
   ids, explicitly allowed source refs, hashes, receipts, and limitations while
   excluding raw source text, author names, local paths, private sessions, and bulk
   comments.

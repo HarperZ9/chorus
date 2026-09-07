@@ -1,4 +1,5 @@
 import json
+import hashlib
 
 from chorus.decision import build_decision, decision_from_paths
 
@@ -112,8 +113,113 @@ def test_public_projection_includes_source_url_only_when_explicitly_allowed():
     )
 
     public = result["public_projection"]["changes"]["changed"][0]
-    assert public["current"]["source_url"] == "https://example.test/comments/same-id"
-    assert "source_url" not in public["reference"]
+    assert public["current"]["public"]["source_url"] == "https://example.test/comments/same-id"
+    assert "source_url" not in public["reference"].get("public", {})
+
+
+def test_public_projection_omits_unallowlisted_task_ids_sources_and_refs():
+    result = build_decision(
+        [
+            {
+                "kind": "comment",
+                "id": "C:/private/current-id",
+                "ref": "C:/private/video-ref",
+                "text": "changed source row",
+                "meta": {"like_count": 2, "source_url": "https://example.test/private-current"},
+            }
+        ],
+        [
+            {
+                "kind": "comment",
+                "id": "C:/private/reference-id",
+                "ref": "C:/private/video-ref",
+                "text": "reference source row",
+                "meta": {
+                    "like_count": 1,
+                    "public_projection_id": "safe-reference-id",
+                    "public_projection_source": "official-doc",
+                    "public_projection_responds_to": "source-reuse-gate",
+                    "source_url": "https://example.test/reference",
+                    "public_projection_url_allowed": True,
+                },
+            }
+        ],
+        task="Compare C:/private/task path",
+    )
+
+    public = result["public_projection"]
+    rendered = json.dumps(public, ensure_ascii=False)
+    assert "C:/private" not in rendered
+    assert "private-current" not in rendered
+    assert public["task_sha256"]
+    assert "task" not in public
+    assert public["changes"]["removed"][0]["public"] == {
+        "id": "safe-reference-id",
+        "source": "official-doc",
+        "responds_to": "source-reuse-gate",
+        "source_url": "https://example.test/reference",
+    }
+    assert public["changes"]["added"][0]["public"] == {}
+
+
+def test_gather_corpus_missing_content_object_is_typed_unverifiable(tmp_path):
+    current = tmp_path / "current"
+    reference = tmp_path / "reference"
+    current.mkdir()
+    reference.mkdir()
+    missing_sha = "a" * 64
+    reference_text = "valid reference object"
+    reference_sha = hashlib.sha256(reference_text.encode("utf-8")).hexdigest()
+    row = {
+        "kind": "comment",
+        "id": "source-row",
+        "ref": "claim",
+        "sha256": missing_sha,
+        "meta": {"like_count": 1},
+    }
+    reference_row = {**row, "sha256": reference_sha}
+    reference_obj = reference / "objects" / reference_sha[:2] / reference_sha[2:]
+    reference_obj.parent.mkdir(parents=True)
+    reference_obj.write_text(reference_text, encoding="utf-8")
+    (current / "catalog.jsonl").write_text(json.dumps(row) + "\n", encoding="utf-8")
+    (reference / "catalog.jsonl").write_text(json.dumps(reference_row) + "\n", encoding="utf-8")
+
+    result = decision_from_paths(str(current), str(reference), task="Detect missing gather objects.")
+
+    assert result["status"] == "UNVERIFIABLE"
+    assert result["source_failures"][0]["code"] == "missing_current_object"
+    assert result["source_counts"]["current_rows"] == 1
+    assert result["source_counts"]["reference_rows"] == 1
+    assert result["source_counts"]["reference_items"] == 1
+
+
+def test_gather_corpus_mismatched_content_object_hash_is_typed_unverifiable(tmp_path):
+    current = tmp_path / "current"
+    reference = tmp_path / "reference"
+    current.mkdir()
+    reference.mkdir()
+    actual_text = "object bytes do not match the catalog sha"
+    advertised_sha = "b" * 64
+    actual_sha = hashlib.sha256(actual_text.encode("utf-8")).hexdigest()
+    for corpus in (current, reference):
+        obj = corpus / "objects" / advertised_sha[:2] / advertised_sha[2:]
+        obj.parent.mkdir(parents=True)
+        obj.write_text(actual_text, encoding="utf-8")
+        row = {
+            "kind": "comment",
+            "id": "source-row",
+            "ref": "claim",
+            "sha256": advertised_sha,
+            "meta": {"like_count": 1},
+        }
+        (corpus / "catalog.jsonl").write_text(json.dumps(row) + "\n", encoding="utf-8")
+
+    result = decision_from_paths(str(current), str(reference), task="Detect object hash mismatch.")
+
+    assert actual_sha != advertised_sha
+    assert result["status"] == "UNVERIFIABLE"
+    assert result["source_failures"][0]["code"] == "mismatched_current_object_hash"
+    assert result["source_counts"]["current_rows"] == 1
 
 
 def test_changed_text_is_drift_even_when_each_digest_receipt_verifies():

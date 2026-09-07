@@ -40,10 +40,11 @@ with provenance, chorus synthesizes the discourse on top of it.
   literal, no sarcasm) are stated in the digest itself.
 - **A daemon.** Point it at a watchlist and it re-synthesizes only when a corpus
   actually changes, storing each receipted digest by its own hash.
-- **A source-change decision.** Compare a current gather corpus against a
-  reference corpus and get a machine-readable decision: added, removed, changed,
-  unchanged, digest verification, disagreement outline, and typed source failure
-  states. The optional public projection is allowlisted and omits raw source text,
+- **A source-change review gate.** Compare a current gather corpus against a
+  reference corpus before reusing a prior synthesis or release note. The result
+  reports added, removed, changed, unchanged, digest verification, a local digest
+  outline, and typed source failure states. The optional public projection is
+  allowlisted and omits raw source text,
   author names, local paths, private session content, and bulk comments. Source
   URLs appear there only when a row explicitly marks them public-projectable.
 - **An MCP surface.** Drive it from any MCP host: `chorus.run`, `chorus.corpora`,

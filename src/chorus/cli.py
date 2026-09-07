@@ -190,14 +190,14 @@ def main(argv: list[str] | None = None) -> int:
     digests.add_argument("store", help="the daemon's digest store directory")
     digests.add_argument("--limit", type=int, default=20)
     digests.set_defaults(func=_cmd_digests)
-    decision = sub.add_parser("decision", help="compare a current source pack to a reference pack")
+    decision = sub.add_parser("decision", help="run a source-change review gate")
     decision.add_argument("current", help="current gather-style JSON row list or gather corpus directory")
     decision.add_argument("--reference", required=True,
                           help="reference gather-style JSON row list or gather corpus directory")
     decision.add_argument("--task", default="Compare current sources against the reference.",
-                          help="human-readable decision task")
+                          help="human-readable source-review task")
     decision.add_argument("--public", action="store_true",
-                          help="emit only the allowlisted public projection")
+                          help="emit only the allowlisted public source-change projection")
     decision.set_defaults(func=_cmd_decision)
     mcp = sub.add_parser("mcp", help="run the chorus MCP stdio server")
     mcp.set_defaults(func=_cmd_mcp)

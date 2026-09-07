@@ -1,8 +1,9 @@
-"""Source-change decisions on top of Chorus's deterministic digest path.
+"""Source-change review gates on top of Chorus's deterministic digest path.
 
 This module compares two already-gathered source packs. It does not fetch or
-publish anything. The public projection is intentionally narrow: item ids,
-source refs, change counts, and hashes only, with no raw source text.
+publish anything. The public projection is intentionally narrow: change counts,
+hashes, and explicitly allowlisted public metadata only, with no raw source text
+or arbitrary local identifiers.
 """
 from __future__ import annotations
 
@@ -25,11 +26,21 @@ _SHA256 = re.compile(r"[0-9a-f]{64}")
 
 
 class SourceReadError(Exception):
-    def __init__(self, code: str, message: str, *, path: str | None = None):
+    def __init__(
+        self,
+        code: str,
+        message: str,
+        *,
+        path: str | None = None,
+        rows_read: int = 0,
+        items_read: int = 0,
+    ):
         super().__init__(message)
         self.code = code
         self.message = message
         self.path = path
+        self.rows_read = rows_read
+        self.items_read = items_read
 
 
 def _sha(obj: Any) -> str:
@@ -64,6 +75,8 @@ def _load_corpus_dir(path: str, *, label: str) -> list[dict]:
     cat = os.path.join(path, "catalog.jsonl")
     if not os.path.exists(cat):
         raise SourceReadError(f"missing_{label}_catalog", f"{label} corpus directory has no catalog.jsonl", path=path)
+    rows_read = 0
+    items_read = 0
     try:
         with open(cat, encoding="utf-8") as f:
             for line_number, line in enumerate(f, start=1):
@@ -77,17 +90,53 @@ def _load_corpus_dir(path: str, *, label: str) -> list[dict]:
                         f"invalid_{label}_jsonl",
                         f"{label} catalog.jsonl line {line_number} is not valid JSON: {exc}",
                         path=cat,
+                        rows_read=rows_read,
+                        items_read=items_read,
                     )
+                rows_read += 1
                 if row.get("kind") == "comment":
+                    items_read += 1
                     sha = row.get("sha256", "")
                     if _SHA256.fullmatch(sha):
                         obj = os.path.join(path, "objects", sha[:2], sha[2:])
-                        if os.path.exists(obj):
-                            with open(obj, encoding="utf-8") as of:
-                                row["text"] = of.read()
+                        if not os.path.exists(obj):
+                            raise SourceReadError(
+                                f"missing_{label}_object",
+                                f"{label} content object for catalog line {line_number} is missing",
+                                path=obj,
+                                rows_read=rows_read,
+                                items_read=items_read,
+                            )
+                        with open(obj, "rb") as of:
+                            raw = of.read()
+                        actual = hashlib.sha256(raw).hexdigest()
+                        if actual != sha:
+                            raise SourceReadError(
+                                f"mismatched_{label}_object_hash",
+                                f"{label} content object for catalog line {line_number} does not match catalog sha256",
+                                path=obj,
+                                rows_read=rows_read,
+                                items_read=items_read,
+                            )
+                        try:
+                            row["text"] = raw.decode("utf-8")
+                        except UnicodeDecodeError as exc:
+                            raise SourceReadError(
+                                f"invalid_{label}_object_encoding",
+                                f"{label} content object for catalog line {line_number} is not UTF-8: {exc}",
+                                path=obj,
+                                rows_read=rows_read,
+                                items_read=items_read,
+                            )
                 rows.append(row)
     except OSError as exc:
-        raise SourceReadError(f"read_{label}_failed", f"{label} corpus could not be read: {exc}", path=path)
+        raise SourceReadError(
+            f"read_{label}_failed",
+            f"{label} corpus could not be read: {exc}",
+            path=path,
+            rows_read=rows_read,
+            items_read=items_read,
+        )
     return rows
 
 
@@ -101,6 +150,52 @@ def _public_url(item: DiscourseItem) -> str | None:
 
 def _source_url_allowed(item: DiscourseItem) -> bool:
     return item.meta.get("public_projection_url_allowed") is True or item.meta.get("public_url_allowed") is True
+
+
+_SAFE_PUBLIC_VALUE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}")
+
+
+def _safe_public_value(value: object) -> str | None:
+    if not isinstance(value, str):
+        return None
+    clean = value.strip()
+    if not clean:
+        return None
+    if "\\" in clean or "/" in clean or ".." in clean or clean.startswith("~"):
+        return None
+    if re.match(r"^[A-Za-z]:", clean):
+        return None
+    return clean if _SAFE_PUBLIC_VALUE.fullmatch(clean) else None
+
+
+def _safe_public_url(value: object) -> str | None:
+    if not isinstance(value, str):
+        return None
+    clean = value.strip()
+    if not clean.lower().startswith(("http://", "https://")):
+        return None
+    if any(ord(ch) < 32 or ch.isspace() for ch in clean):
+        return None
+    return clean if len(clean) <= 2048 else None
+
+
+def _public_metadata(item: DiscourseItem) -> dict:
+    meta = item.meta
+    out: dict[str, str] = {}
+    for public_key, candidates in {
+        "id": ("public_projection_id", "public_id"),
+        "source": ("public_projection_source", "public_source"),
+        "responds_to": ("public_projection_responds_to", "public_responds_to"),
+    }.items():
+        for candidate in candidates:
+            value = _safe_public_value(meta.get(candidate))
+            if value:
+                out[public_key] = value
+                break
+    url = _safe_public_url(_public_url(item)) if _source_url_allowed(item) else None
+    if url:
+        out["source_url"] = url
+    return out
 
 
 def _source_ref(item: DiscourseItem) -> dict:
@@ -124,6 +219,7 @@ def _fingerprint(item: DiscourseItem) -> dict:
     }
     body["item_sha256"] = _sha(body)
     body["source_url_allowed"] = _source_url_allowed(item)
+    body["public"] = _public_metadata(item)
     return body
 
 
@@ -155,6 +251,7 @@ def _change_entry(snapshot: dict) -> dict:
         "responds_to": snapshot["responds_to"],
         "source_url": snapshot.get("source_url"),
         "source_url_allowed": bool(snapshot.get("source_url_allowed")),
+        "public": dict(snapshot.get("public") or {}),
         "text_sha256": snapshot["text_sha256"],
         "item_sha256": snapshot["item_sha256"],
     }
@@ -190,12 +287,11 @@ def _digest_outline(digest: dict) -> dict:
 
 
 def _public_ref(row: dict) -> dict:
-    out = {"id": row["id"], "source": row["source"], "responds_to": row["responds_to"]}
-    if row.get("source_url_allowed") and row.get("source_url"):
-        out["source_url"] = row["source_url"]
-    out["text_sha256"] = row["text_sha256"]
-    out["item_sha256"] = row["item_sha256"]
-    return out
+    return {
+        "public": dict(row.get("public") or {}),
+        "text_sha256": row["text_sha256"],
+        "item_sha256": row["item_sha256"],
+    }
 
 
 def _public_receipt(receipt: dict | None) -> dict | None:
@@ -217,7 +313,7 @@ def _public_projection(result: dict) -> dict:
     changes = result.get("changes", {})
     return {
         "schema": PUBLIC_SCHEMA,
-        "task": result.get("task", ""),
+        "task_sha256": _text_sha(result.get("task", "")),
         "status": result["status"],
         "decision": result["decision"],
         "human_summary": result["human_summary"],
@@ -228,7 +324,6 @@ def _public_projection(result: dict) -> dict:
             "removed": [_public_ref(row) for row in changes.get("removed", [])],
             "changed": [
                 {
-                    "id": row["id"],
                     "changed_fields": row["changed_fields"],
                     "current": _public_ref(row["current"]),
                     "reference": _public_ref(row["reference"]),
@@ -238,14 +333,14 @@ def _public_projection(result: dict) -> dict:
         },
         "checks": result.get("checks", {}),
         "source_failures": [
-            {"code": failure["code"], "message": failure["message"]}
+            {"code": failure["code"], "message": "Source failure; inspect the local result."}
             for failure in result.get("source_failures", [])
         ],
         "receipt": _public_receipt(result.get("receipt")),
         "limitations": [
             "Public projection excludes raw source text, author names, local paths, private session content, and bulk comments.",
             "MATCH only means the compared source ids and fingerprints matched; it does not prove the source set is complete.",
-            "DRIFT identifies source changes for review; it does not decide product readiness by itself.",
+            "DRIFT identifies source changes for review; it does not decide source meaning or product readiness.",
         ],
     }
 
@@ -376,7 +471,7 @@ def build_decision(current_rows: list[dict], reference_rows: list[dict], *, task
         "human_summary": (
             f"Source comparison detected {len(added)} added, {len(removed)} removed, "
             f"and {len(changed)} changed item(s) across {len(current_ids | reference_ids)} comparable ids; "
-            f"{'review current sources before release decision.' if status == 'DRIFT' else 'no source drift was detected.'}"
+            f"{'review current sources before reusing the prior decision.' if status == 'DRIFT' else 'no source drift was detected.'}"
         ),
     }
     result["public_projection"] = _public_projection(result)
@@ -387,6 +482,7 @@ def decision_from_paths(current: str, reference: str, *, task: str = "") -> dict
     failures: list[dict] = []
     current_rows: list[dict] | None = None
     reference_rows: list[dict] | None = None
+    known_counts: dict[str, tuple[int, int]] = {}
     for label, path in (("current", current), ("reference", reference)):
         try:
             rows = _load_rows(path, label=label)
@@ -395,6 +491,7 @@ def decision_from_paths(current: str, reference: str, *, task: str = "") -> dict
             if exc.path:
                 failure["path"] = exc.path
             failures.append(failure)
+            known_counts[label] = (exc.rows_read, exc.items_read)
             continue
         if label == "current":
             current_rows = rows
@@ -405,10 +502,14 @@ def decision_from_paths(current: str, reference: str, *, task: str = "") -> dict
         current_items = normalize(current_rows) if isinstance(current_rows, list) else []
         reference_items = normalize(reference_rows) if isinstance(reference_rows, list) else []
         result["source_counts"] = {
-            "current_rows": len(current_rows) if isinstance(current_rows, list) else 0,
-            "reference_rows": len(reference_rows) if isinstance(reference_rows, list) else 0,
-            "current_items": len(current_items),
-            "reference_items": len(reference_items),
+            "current_rows": len(current_rows) if isinstance(current_rows, list) else known_counts.get("current", (0, 0))[0],
+            "reference_rows": (
+                len(reference_rows) if isinstance(reference_rows, list) else known_counts.get("reference", (0, 0))[0]
+            ),
+            "current_items": len(current_items) if isinstance(current_rows, list) else known_counts.get("current", (0, 0))[1],
+            "reference_items": (
+                len(reference_items) if isinstance(reference_rows, list) else known_counts.get("reference", (0, 0))[1]
+            ),
         }
         result["public_projection"] = _public_projection(result)
         return result

@@ -3,7 +3,7 @@
 Exposes the discourse lens as MCP tools on the project-telos.flagship-action/v1
 envelope, mirroring the ecosystem's MCP shape: chorus.status, chorus.doctor,
 chorus.run (a corpus -> a verified digest), chorus.decision (current source pack
--> reference source pack), chorus.corpora (discover sources), chorus.digests
+-> reference source pack review gate), chorus.corpora (discover sources), chorus.digests
 (what the daemon has stored). Status and doctor never render a verdict token.
 """
 from __future__ import annotations
@@ -56,11 +56,11 @@ def _tool_defs() -> list[dict]:
           }, "required": ["store"]}},
         {"name": "chorus.decision",
          "description": "Compare a current gather-style source pack against a reference pack and "
-                        "return a receipt-backed source-change decision.",
+                        "return a receipt-backed source-change review gate.",
          "inputSchema": {"type": "object", "properties": {
              "current": {"type": "string", "description": "current gather corpus dir or JSON row list"},
              "reference": {"type": "string", "description": "reference gather corpus dir or JSON row list"},
-             "task": {"type": "string", "description": "human-readable decision task"},
+             "task": {"type": "string", "description": "human-readable source-review task"},
              "public": {"type": "boolean", "description": "emit only the allowlisted public projection"},
           }, "required": ["current", "reference"]}},
     ]
