@@ -96,3 +96,57 @@ def test_non_latin_text_forms_terms_and_does_not_crash():
     scored = [_s("这个视频很好 sound design", 3, 0.2, "a"), _s("这个视频很好 sound design", 2, 0.2, "b")]
     d = synthesize(scored, threshold=0.1)
     assert d.n_items == 2 and len(d.themes) == 1     # shared non-Latin + Latin terms cluster them
+
+
+def test_theme_label_filters_generic_modal_words():
+    # Break caught: raw frequency labels "can / have / some" instead of the topic the
+    # cluster actually shares.
+    scored = [
+        _s("can have some battery diagnostics", 2, 0.0, "a"),
+        _s("can have some battery diagnostics", 2, 0.0, "b"),
+        _s("can have some battery diagnostics", 2, 0.0, "c"),
+    ]
+    d = synthesize(scored, threshold=0.0)
+    terms = d.themes[0].label.split(" / ")
+    assert terms == ["battery", "diagnostics"]
+    assert d.themes[0].label_quality["support"] == "cluster"
+    assert d.themes[0].label_quality["warnings"] == ()
+
+
+def test_theme_label_survives_negation_and_generic_words():
+    # Break caught: negation-heavy operational requests get labelled by generic
+    # function words instead of the shared product topic.
+    scored = [
+        _s("can have because never rollback checkpoint plan", 2, -0.2, "a"),
+        _s("can have because without rollback checkpoint preview", 2, -0.2, "b"),
+        _s("can have because not rollback checkpoint consent", 2, -0.2, "c"),
+    ]
+    d = synthesize(scored, threshold=0.0)
+    terms = d.themes[0].label.split(" / ")
+    assert terms == ["checkpoint", "rollback"]
+    assert all(term not in {"can", "have", "because", "never", "without"} for term in terms)
+
+
+def test_singleton_theme_carries_weak_support_warning():
+    # Break caught: a single comment can be useful evidence, but it must not be
+    # rendered as a coherent crowd theme without an explicit support warning.
+    d = synthesize([_s("quota tracker limits", 0, 0.0, "a")])
+    assert d.themes[0].label == "limits / quota / tracker"
+    assert d.themes[0].label_quality["support"] == "singleton"
+    assert d.themes[0].label_quality["warnings"] == ("singleton_theme",)
+
+
+def test_mixed_cluster_with_low_term_coverage_warns_weak_label_support():
+    # Break caught: a heterogeneous cluster with only two voices per candidate
+    # term must not present a specific label as if it summarized the cluster.
+    scored = [
+        _s("payment receipt audit", 2, 0.0, "a"),
+        _s("payment receipt export", 2, 0.0, "b"),
+        _s("rollback checkpoint preview", 2, 0.0, "c"),
+        _s("rollback checkpoint consent", 2, 0.0, "d"),
+        _s("quota tracker budget", 2, 0.0, "e"),
+        _s("quota tracker limits", 2, 0.0, "f"),
+    ]
+    d = synthesize(scored, threshold=0.0)
+    assert d.themes[0].label_quality["support"] == "weak"
+    assert d.themes[0].label_quality["warnings"] == ("weak_label_support",)

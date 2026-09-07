@@ -19,9 +19,13 @@ with provenance, chorus synthesizes the discourse on top of it.
 ## What you get
 
 - **Themes, ranked.** Comments cluster into themes by what they say; each theme
-  carries its size, an engagement-and-sentiment weight, a sentiment split, a
-  *controversy* score (how divided and how strongly felt), and the single
-  highest-weight voice that disagrees with the majority.
+  carries a corpus-salience label, label-support metadata, its size, an
+  engagement-and-sentiment weight, a sentiment split, a *controversy* score (how
+  divided and how strongly felt), and the single highest-weight voice that
+  disagrees with the majority. Singleton and weak-support labels are named as
+  such in the digest instead of being presented as broad crowd themes. Theme item
+  IDs stay in the output so callers can resolve labels back to the source links
+  and provenance in their corpus.
 - **The contested topics, named.** A separate lens reports the aspects the corpus
   is genuinely split on, measured across *every* comment that mentions a topic. It
   is immune to the lexical clustering that would otherwise file "the battery is
@@ -38,6 +42,10 @@ with provenance, chorus synthesizes the discourse on top of it.
   actually changes, storing each receipted digest by its own hash.
 - **An MCP surface.** Drive it from any MCP host: `chorus.run`, `chorus.corpora`,
   `chorus.digests`, `chorus.status`, `chorus.doctor`.
+
+## Release notes
+
+See [CHANGELOG.md](CHANGELOG.md). Version 0.2.0 writes `chorus-lens/3` receipts with label-support metadata while preserving historical `chorus-lens/2` verification through an explicit legacy path. v2 receipts do not bind the current v3-only label terms or `label_quality` fields.
 
 ## Run it
 
@@ -58,16 +66,19 @@ JSON list of rows. Add `--model "<command>"` to `run` to overlay a model's read 
 the comments the lexicon is least sure about; the overlay is provenance-tagged and
 never enters the re-checkable core.
 
-![Eight stages of verifying a discourse digest: receipt, version, vocabulary, inputs, rescore, recluster, rehash, and verdict. The receipt supplies the parameters and hashes the original run recorded. The method version has to still match, because a digest built under an older pipeline is not re-derivable under this one. The lexicon is hashed into the receipt, so editing the word list invalidates every digest that was built with the old one. The corpus hash is checked before any work is done. Then the stored sentiment is thrown away and every comment is re-scored from its own text, which is why fabricated sentiment cannot verify. Clustering and weighting re-run from the parameters the receipt recorded, not from the live defaults, so raising a default cannot silently break an already-versioned receipt. The digest body is rebuilt from that re-derivation and hashed. The verdict is one boolean with nothing taken on trust: a digest whose themes, weights or sentiment distribution do not follow from the inputs fails, even when its own stored hash was recomputed to match its tampered body. Three outcomes: verified, tampered, and no receipt.](docs/art/verify-lane.svg)
+![Eight stages of verifying a discourse digest: receipt, version, vocabulary, inputs, rescore, recluster, rehash, and verdict. The receipt supplies the parameters and hashes the original run recorded. The method version selects the verifier for that pipeline; unsupported versions fail instead of being guessed. The lexicon is hashed into the receipt, so editing the word list invalidates every digest that was built with the old one. The corpus hash is checked before any work is done. Then the stored sentiment is thrown away and every comment is re-scored from its own text, which is why fabricated sentiment cannot verify. Clustering and weighting re-run from the parameters the receipt recorded, not from the live defaults, so raising a default cannot silently break an already-versioned receipt. The digest body is rebuilt from that re-derivation and hashed. The verdict is one boolean with nothing taken on trust: a digest whose themes, weights or sentiment distribution do not follow from the inputs fails, even when its own stored hash was recomputed to match its tampered body. Three outcomes: verified, tampered, and no receipt.](docs/art/verify-lane.svg)
 
 ## The receipt
 
 The digest's `receipt` binds the inputs, the method, and the result. `verify`
+first checks that the submitted digest body still matches its own receipt, then
 re-runs the deterministic pipeline (score, cluster, weight) from the same corpus
-and checks the hash, so a dishonest digest cannot pass. Any model overlay is listed
-separately with its own provenance and is excluded from that check: the parts a
-stranger can re-derive and the parts that are model opinion are kept distinct, on
-the record.
+through the method-version verifier recorded in the receipt. Current runs write
+`chorus-lens/3`; historical `chorus-lens/2` receipts remain checkable through
+their legacy label body. Unsupported method versions fail closed. Any model
+overlay is listed separately with its own provenance and is excluded from that
+check: the parts a stranger can re-derive and the parts that are model opinion
+are kept distinct, on the record.
 
 ![Twelve rows covering every number a digest reports and where it comes from. The lexicon is thirty words, fifteen positive and fifteen negative, each carrying a valence between minus three and plus three, and the whole list is hashed into every receipt. Ten intensifiers are looked for up to three tokens back, widening or narrowing a valence. Nine negators flip a valence and keep about three quarters of its size, so a negation weakens a claim rather than erasing it. The compound score runs from minus one to one, the summed valence divided by the root of itself squared plus fifteen, so no single loud comment runs away with a theme. Two emphases apply: an all-caps valence word of more than one letter counts a quarter more, and up to four exclamation marks add five percent each. Weight is the log of one plus engagement, times one plus half the sentiment intensity. Clustering runs a hashed TF-IDF cosine over five hundred and twelve dimensions against the nearest leader, joining above eighteen hundredths, seeded most-engaged first. Controversy is the population standard deviation of a theme's sentiment, zero at consensus and near one at a hard split. Twelve contested aspects are surfaced, each needing three mentioning voices and real disagreement on both sides. The receipt carries seven fields. The accented row is the model overlay, which is advisory opinion on the items the lexicon is least sure of and is deliberately kept outside the digest hash. The last row is engagement coverage, which reports how many items actually carried a signal, because an absent signal is recorded absent rather than counted as a zero.](docs/art/method-table.svg)
 
