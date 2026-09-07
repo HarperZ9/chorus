@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "chorus-discourse"
-version = "0.2.0"
+version = "0.3.0"
 description = "A discourse-synthesis satellite for gather: weighted, clustered, re-checkable readings of comment corpora."
 readme = "README.md"
 requires-python = ">=3.10"

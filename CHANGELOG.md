@@ -2,16 +2,29 @@
 
 ## Unreleased
 
+- No unreleased changes after the 0.3.0 release candidate cut.
+
+## 0.3.0 - 2026-09-07
+
 - Adds `chorus decision` and MCP `chorus.decision`, a source-change review gate
   that compares current and reference gather-style source packs, reports
   added/removed/changed/unchanged item ids, verifies both deterministic Chorus
   digests, and returns typed `UNVERIFIABLE` failure states for missing, malformed,
   empty, or ambiguous source inputs.
-- Adds an allowlisted public projection for the review-gate result. It keeps
-  counts, hashes, receipts, and limitations by default; human-readable public
-  ids, source names, refs, and URLs require an operator-authored projection
-  policy rather than source-row metadata. It excludes raw source text, author
-  names, local paths, private sessions, and bulk comments.
+- Adds a safe public projection for the review-gate result. It keeps counts,
+  hashes, receipts, and limitations by default; human-readable public ids, source
+  names, refs, and URLs require an operator-authored projection policy rather
+  than source-row metadata. It excludes raw source text, author names, local paths,
+  private sessions, and bulk comments.
+- Hardens false-success controls for source packs: missing or malformed text,
+  invalid, missing, mismatched, or non-UTF-8 Gather objects, duplicate ids, and
+  absent, null, blank, or non-string ids return typed `UNVERIFIABLE` instead of
+  being compared as unchanged.
+
+This release does not decide whether a source claim is true, complete, or ready
+for publication. `MATCH` means the compared source observations and fingerprints
+are unchanged; `DRIFT` means a reviewer should inspect the changed source rows;
+`UNVERIFIABLE` means source capture or identity must be repaired before reuse.
 
 ## 0.2.0 - 2026-09-07
 

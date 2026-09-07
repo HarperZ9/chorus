@@ -54,7 +54,7 @@ with provenance, chorus synthesizes the discourse on top of it.
 
 ## Release notes
 
-See [CHANGELOG.md](CHANGELOG.md). Version 0.2.0 writes `chorus-lens/3` receipts with label-support metadata while preserving historical `chorus-lens/2` verification through an explicit legacy path. v2 receipts do not bind the current v3-only label terms or `label_quality` fields.
+See [CHANGELOG.md](CHANGELOG.md). Version 0.3.0 adds `chorus decision` and MCP `chorus.decision` as a source-change review gate for deciding whether a prior synthesis or release note can reuse the same source observations, needs source review, or must hold for source repair. It does not decide whether a source claim is true, complete, or ready for publication. Version 0.2.0 writes `chorus-lens/3` receipts with label-support metadata while preserving historical `chorus-lens/2` verification through an explicit legacy path. v2 receipts do not bind the current v3-only label terms or `label_quality` fields.
 
 ## Run it
 
