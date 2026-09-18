@@ -77,6 +77,20 @@ JSON list of rows. Add `--model "<command>"` to `run` to overlay a model's read 
 the comments the lexicon is least sure about; the overlay is provenance-tagged and
 never enters the re-checkable core.
 
+No service key or provider account is needed for the deterministic path. The
+bundled sample is the quickest local check:
+
+```bash
+chorus run examples/discourse-sample.json --verify
+python -m pytest
+```
+
+If `chorus` is not on `PATH`, reinstall from the checkout with
+`python -m pip install -e .` and open a new shell. `chorus.status` and
+`chorus.doctor` are MCP tools exposed through `chorus mcp`; they are not separate
+CLI subcommands. Public source-change projections need an operator-authored
+`--public-policy` sidecar before source names, ids, refs, or URLs appear.
+
 ![Eight stages of verifying a discourse digest: receipt, version, vocabulary, inputs, rescore, recluster, rehash, and verdict. The receipt supplies the parameters and hashes the original run recorded. The method version selects the verifier for that pipeline; unsupported versions fail instead of being guessed. The lexicon is hashed into the receipt, so editing the word list invalidates every digest that was built with the old one. The corpus hash is checked before any work is done. Then the stored sentiment is thrown away and every comment is re-scored from its own text, which is why fabricated sentiment cannot verify. Clustering and weighting re-run from the parameters the receipt recorded, not from the live defaults, so raising a default cannot silently break an already-versioned receipt. The digest body is rebuilt from that re-derivation and hashed. The verdict is one boolean with nothing taken on trust: a digest whose themes, weights or sentiment distribution do not follow from the inputs fails, even when its own stored hash was recomputed to match its tampered body. Three outcomes: verified, tampered, and no receipt.](docs/art/verify-lane.svg)
 
 ## The receipt
