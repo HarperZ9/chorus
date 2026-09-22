@@ -1,8 +1,14 @@
 # Changelog
 
-## Unreleased
+## 0.3.1 - 2026-09-22
 
-- No unreleased changes after the 0.3.0 release candidate cut.
+- Fixes the gather-to-chorus wiring gap. `normalize()` mapped only `feed_item`,
+  so feed entries from a real gather corpus were dropped without a diagnostic and
+  only YouTube comments reached the discourse surface. `feed-entry` now maps to
+  the `feed` source, and `feed_item` is kept for back-compat.
+- Adds an OIDC trusted-publishing release workflow with tag/version, artifact
+  digest, clean-venv entry-point resolution, and sdist-rebuild gates.
+- Publishes to PyPI as `chorus-discourse`. The console script stays `chorus`.
 
 ## 0.3.0 - 2026-09-07
 
