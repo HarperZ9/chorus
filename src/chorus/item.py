@@ -10,7 +10,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 # Which gather Item kinds are discourse (as opposed to the media they respond to).
-_DISCOURSE_KINDS = {"comment": "video", "feed_item": "feed", "post": "reddit", "reply": "reddit"}
+# "feed-entry" is the kind gather's feed adapter actually emits; "feed_item" is
+# kept as an alias so either producer naming normalizes.
+_DISCOURSE_KINDS = {"comment": "video", "feed-entry": "feed", "feed_item": "feed",
+                    "post": "reddit", "reply": "reddit"}
 
 
 @dataclass(frozen=True)
