@@ -1,6 +1,20 @@
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/HarperZ9/chorus/main/docs/art/hero-dark.svg">
+  <img src="https://raw.githubusercontent.com/HarperZ9/chorus/main/docs/art/hero-light.svg" alt="chorus: Turn a comment corpus into a ranked, re-checkable discourse digest. Bundles of fine lines carry the work through 5 stations, normalize, score, cluster, contested and receipt, along a sweeping path into a bright core." width="100%">
+</picture>
+
 # chorus
 
-![chorus](docs/art/chorus-header.svg)
+Turn a comment corpus into a ranked, re-checkable discourse digest.
+
+```
+pip install -e .
+```
+
+[![version: 0.3.0](https://img.shields.io/badge/version-0.3.0-e6e1d6?style=flat-square&labelColor=1a1712)](https://github.com/HarperZ9/chorus/releases/latest)
+[![CI](https://github.com/HarperZ9/chorus/actions/workflows/ci.yml/badge.svg)](https://github.com/HarperZ9/chorus/actions/workflows/ci.yml)
+[![license](https://img.shields.io/badge/license-FSL--1.1--MIT-e6e1d6?style=flat-square&labelColor=1a1712)](https://github.com/HarperZ9/chorus/blob/main/LICENSE)
+![python 3.10+](https://img.shields.io/badge/python-3.10%2B-e6e1d6?style=flat-square&labelColor=1a1712)
 
 Read a comment section the way you wish you could: not scrolled, but **synthesized**.
 
