@@ -40,9 +40,15 @@ def _items(rows):
 def test_every_drawing_is_committed_and_reaches_the_page():
     """A rendered file nobody embeds is a file nobody sees, so both are checked."""
     page = _readme()
+    front = page
+    # The previous header left the README on 4 October 2026 and is recorded in the brand notes;
+    # a page here is the README or a doc under docs/, the same set tools/check_repo_art.py uses.
+    page += "".join(q.read_text(encoding="utf-8") for q in sorted((ROOT / "docs").rglob("*.md")))
     for name in DRAWINGS:
         assert (ROOT / "docs/art" / name).exists(), name
         assert f"docs/art/{name}" in page, name
+    for hero in ("docs/art/hero-dark.svg", "docs/art/hero-light.svg"):
+        assert (ROOT / hero).is_file() and hero in front, hero
 
 
 def test_the_alt_text_on_the_page_is_the_alt_text_in_the_spec():
