@@ -36,6 +36,37 @@ The [animated explainer](https://harperz9.github.io/repo-explainers/chorus.html)
 walks through the bundled twelve-comment sample: lexicon scores, engagement weights, five themes, the contested battery topic, and a digest receipt that rejects a doctored weight even with its hash recomputed. Every value on it is output from this repository. Its
 source is [docs/explainer/index.html](docs/explainer/index.html).
 
+## Watch
+
+No concept film fits this tool closely yet. The walkthrough below covers it in text, with real commands and output.
+
+Video walkthrough: coming with the next release.
+
+## Walkthrough
+
+Install it, run it once, then use the main feature. Each command below is real, and so is its output.
+
+1. **Install.** Install from a checkout. Python 3.10 or newer; no service key and no model.
+
+   ```text
+   $ git clone https://github.com/HarperZ9/chorus && cd chorus
+   $ pip install -e .
+   ```
+
+2. **First run: digest a thread.** Score, weight and cluster the sample comments, then verify the digest.
+
+   ```text
+   $ chorus run examples/discourse-sample.json --verify
+     "contested": [ ... "term": "battery", "contested": 0.5386 ... ]
+   ```
+
+3. **Re-derive the digest.** In Python, verify a digest against the scored comments. An edited digest is rejected.
+
+   ```text
+   >>> verify(edited, scored)
+   False
+   ```
+
 ## What you get
 
 - **Themes, ranked.** Comments cluster into themes by what they say; each theme
