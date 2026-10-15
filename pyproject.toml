@@ -5,12 +5,28 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "chorus-discourse"
 version = "0.3.1"
-description = "A discourse-synthesis satellite for gather: weighted, clustered, re-checkable readings of comment corpora."
+description = "Turn a comment corpus into a ranked, re-checkable discourse digest."
 readme = "README.md"
 requires-python = ">=3.10"
 license = "LicenseRef-FSL-1.1-MIT"
 license-files = ["LICENSE"]
+keywords = ["discourse", "comments", "clustering", "nlp", "research"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Environment :: Console",
+  "Intended Audience :: Developers",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+  "Topic :: Text Processing :: Linguistic",
+  "Topic :: Scientific/Engineering :: Information Analysis",
+]
 dependencies = []
+
+[project.urls]
+Homepage = "https://harperz9.github.io/chorus.html"
+Source = "https://github.com/HarperZ9/chorus"
+Issues = "https://github.com/HarperZ9/chorus/issues"
+Changelog = "https://github.com/HarperZ9/chorus/blob/main/CHANGELOG.md"
 
 [project.scripts]
 chorus = "chorus.cli:main"
