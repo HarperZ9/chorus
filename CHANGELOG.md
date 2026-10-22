@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Licence: future releases are AGPL-3.0-only. Published releases up to 0.3.1
+  keep their FSL-1.1-MIT terms and still convert to MIT two years after each
+  release.
+
 ## 0.3.1 - 2026-09-22
 
 - Fixes the gather-to-chorus wiring gap. `normalize()` mapped only `feed_item`,
