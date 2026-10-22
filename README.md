@@ -13,7 +13,7 @@ pip install -e .
 
 [![version: 0.3.0](https://img.shields.io/badge/version-0.3.0-e6e1d6?style=flat-square&labelColor=1a1712)](https://github.com/HarperZ9/chorus/releases/latest)
 [![CI](https://github.com/HarperZ9/chorus/actions/workflows/ci.yml/badge.svg)](https://github.com/HarperZ9/chorus/actions/workflows/ci.yml)
-[![license](https://img.shields.io/badge/license-FSL--1.1--MIT-e6e1d6?style=flat-square&labelColor=1a1712)](https://github.com/HarperZ9/chorus/blob/main/LICENSE)
+[![license](https://img.shields.io/badge/license-AGPL--3.0--only-e6e1d6?style=flat-square&labelColor=1a1712)](https://github.com/HarperZ9/chorus/blob/main/LICENSE)
 ![python 3.10+](https://img.shields.io/badge/python-3.10%2B-e6e1d6?style=flat-square&labelColor=1a1712)
 
 Read a comment section the way you wish you could: not scrolled, but **synthesized**.
@@ -161,9 +161,15 @@ tells you what it did and hands you the means to check it.
 
 ## License
 
-Source-available under the Functional Source License (FSL-1.1-MIT) (see [LICENSE](LICENSE)):
-read it, run it, build on it; commercial use that competes with the project is
-reserved.
+Chorus is free software under the GNU Affero General Public License, version 3
+only (AGPL-3.0-only). See [LICENSE](LICENSE) and [NOTICE](NOTICE).
+
+Anyone may use, study, change and share it. If you distribute a changed copy, or
+run one as a service that people use over a network, you must offer them its
+source under the same licence.
+
+Releases up to 0.3.1 were published under FSL-1.1-MIT. They keep those terms,
+and each converts to MIT two years after its release.
 
 ---
 

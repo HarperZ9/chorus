@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=61"]
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -8,8 +8,9 @@ version = "0.3.1"
 description = "Turn a comment corpus into a ranked, re-checkable discourse digest."
 readme = "README.md"
 requires-python = ">=3.10"
-license = "LicenseRef-FSL-1.1-MIT"
-license-files = ["LICENSE"]
+license = "AGPL-3.0-only"
+license-files = ["LICENSE", "NOTICE"]
+authors = [{ name = "Zain Dana Harper", email = "zaindharper@gmail.com" }]
 keywords = ["discourse", "comments", "clustering", "nlp", "research"]
 classifiers = [
   "Development Status :: 3 - Alpha",
