@@ -3,63 +3,104 @@
   <img src="https://raw.githubusercontent.com/HarperZ9/chorus/main/docs/art/hero-light.svg" alt="chorus: Turn a comment corpus into a ranked, re-checkable discourse digest. Bundles of fine lines carry the work through 5 stations, normalize, score, cluster, contested and receipt, along a sweeping path into a bright core." width="100%">
 </picture>
 
-# chorus
+# Chorus
 
-Turn a comment corpus into a ranked, re-checkable discourse digest.
+Chorus reads a comment section and tells you what the crowd says, how strongly,
+and where it disagrees, with a receipt anyone can re-run.
 
+Give it a set of comments and it returns a digest: the themes people raise,
+ranked by engagement and strength of feeling, the loudest voice that disagrees
+with each theme's majority, and the topics the crowd is split on. The same input
+always gives the same digest, and a stranger can check that the digest follows
+from the comments. It runs on your machine with Python alone, with no model, no
+service key and no network call.
+
+It is for journalists, researchers, moderators and product teams who read large
+comment threads and need a summary they can show their working for.
+
+## Install and first run
+
+Python 3.10 or newer. Chorus has no third-party dependencies.
+
+```bash
+python -m pip install chorus-discourse
+curl -LO https://raw.githubusercontent.com/HarperZ9/chorus/main/examples/discourse-sample.json
+chorus run discourse-sample.json --verify
 ```
-pip install -e .
+
+The sample holds twelve comments on a phone review. The digest is JSON; trimmed,
+it reads:
+
+```text
+"themes":    "display / screen / bright", "drains / battery", "phone / life / battery",
+             "camera / photos / average", "awful / dead / disappointing"
+"contested": "life" (0.5531, 3 mentions), "battery" (0.5386, 5 mentions)
+"verified":  true
 ```
 
-[![version: 0.3.0](https://img.shields.io/badge/version-0.3.0-e6e1d6?style=flat-square&labelColor=1a1712)](https://github.com/HarperZ9/chorus/releases/latest)
-[![CI](https://github.com/HarperZ9/chorus/actions/workflows/ci.yml/badge.svg)](https://github.com/HarperZ9/chorus/actions/workflows/ci.yml)
-[![license](https://img.shields.io/badge/license-AGPL--3.0--only-e6e1d6?style=flat-square&labelColor=1a1712)](https://github.com/HarperZ9/chorus/blob/main/LICENSE)
-![python 3.10+](https://img.shields.io/badge/python-3.10%2B-e6e1d6?style=flat-square&labelColor=1a1712)
+To see the receipt refuse an edited digest, run this from the same folder:
 
-Read a comment section the way you wish you could: not scrolled, but **synthesized**.
+```python
+import dataclasses, json
+from chorus.item import normalize
+from chorus.sentiment import score
+from chorus.synthesize import synthesize
+from chorus.receipt import verify
 
-chorus takes a corpus of comments or threads and returns a weighted, clustered,
-re-checkable reading of the discourse. It tells you the themes people are actually
-voicing, ranks them by how much the crowd engaged and how strongly they felt,
-surfaces the sharpest dissent instead of hiding it behind an average, and names the
-topics the crowd is genuinely **split** on. Every digest carries a receipt a
-stranger can re-run to get the same answer. Zero third-party runtime dependencies.
+scored = score(normalize(json.load(open("discourse-sample.json"))))
+digest = synthesize(scored)
+print(verify(digest, scored))   # True
 
-It orbits [gather](https://github.com/HarperZ9/gather): gather captures the corpus
-with provenance, chorus synthesizes the discourse on top of it.
+theme = dataclasses.replace(digest.themes[0], weighted_score=999.0)
+edited = dataclasses.replace(digest, themes=(theme,) + tuple(digest.themes[1:]))
+print(verify(edited, scored))   # False
+```
+
+Your own input is a JSON list of rows such as
+`{"kind": "comment", "id": "c01", "ref": "video-1", "text": "...", "meta": {"like_count": 340}}`,
+or a corpus folder written by [Gather](https://github.com/HarperZ9/gather).
+Rows of kind `comment`, `post`, `reply` and `feed-entry` count as discourse.
+`like_count` or `score` in `meta` sets engagement; a row without either is
+recorded as having no signal, never as zero.
+
+## How it compares
+
+- **VADER** scores the sentiment of one text from a lexicon and rules. Chorus
+  uses a smaller lexicon of the same kind, then groups comments into themes,
+  weights them by engagement and reports split topics across the whole thread.
+- **BERTopic** and other embedding topic models find themes by meaning, so they
+  group paraphrases that Chorus misses. They need a model download, and their
+  output is not re-derivable byte for byte. Chorus clusters by shared words and
+  writes a receipt that reproduces every number.
+- **Polis** clusters participants by how they vote on each other's statements in
+  a live deliberation it hosts. Chorus works after the fact, on comments already
+  posted somewhere else.
+- **Asking a language model to summarise the thread** gives fluent prose that
+  cannot be checked against the comments. Chorus can pass its least certain
+  comments to a model you name with `--model`, and it keeps that opinion outside
+  the receipt.
+
+## Limits
+
+- Sentiment comes from a 30-word English lexicon. It reads text literally, so it
+  misses sarcasm, irony and other languages.
+- Clustering is lexical. Two comments that make one point in different words can
+  land in different themes.
+- A verified receipt shows the digest follows from the input. It does not show
+  the input is complete, representative or free of coordinated accounts.
+- The test suite is small, and Chorus has not yet been studied on real comment
+  sections. Treat its themes as a starting point for your own reading.
 
 ![Eight stages of turning a corpus of comments into a discourse digest: normalize, engagement, score, weight, cluster, themes, contested, and receipt. Gathered rows become discourse items, and rows that are not discourse are skipped. Engagement is read from the source when it is present; when a source genuinely has no signal, engagement is zero and the absence is recorded, so a missing vote is never counted as a real zero-weight one. Sentiment comes from a thirty word lexicon with negation, intensifier, capitalization and punctuation rules, and the same text always scores the same. Weight is the natural log of one plus engagement, multiplied by one plus half the sentiment intensity, so a loud comment nobody engaged with stays small. Clustering is a hashed TF-IDF cosine against the nearest leader across five hundred and twelve dimensions, seeded most-engaged first. Each theme carries its size, its sentiment split, its controversy, and the single highest-weight voice that disagrees with the majority. Contested aspects are measured separately across every comment that mentions a term, so a topic the corpus is split on survives the clustering that would file praise and complaint about it under different themes. The receipt hashes the inputs, the parameters and the digest body. Three outcomes: re-derived, rejected, and advisory only.](docs/art/synthesis-lane.svg)
 
 ## See it work, step by step
 
 The [animated explainer](https://harperz9.github.io/repo-explainers/chorus.html)
-walks through the bundled twelve-comment sample: lexicon scores, engagement weights, five themes, the contested battery topic, and a digest receipt that rejects a doctored weight even with its hash recomputed. Every value on it is output from this repository. Its
-source is [docs/explainer/index.html](docs/explainer/index.html).
-
-## Walkthrough
-
-Install it, run it once, then use the main feature. Each command below is real, and so is its output.
-
-1. **Install.** Install from a checkout. Python 3.10 or newer; no service key and no model.
-
-   ```text
-   $ git clone https://github.com/HarperZ9/chorus && cd chorus
-   $ pip install -e .
-   ```
-
-2. **First run: digest a thread.** Score, weight and cluster the sample comments, then verify the digest.
-
-   ```text
-   $ chorus run examples/discourse-sample.json --verify
-     "contested": [ ... "term": "battery", "contested": 0.5386 ... ]
-   ```
-
-3. **Re-derive the digest.** In Python, verify a digest against the scored comments. An edited digest is rejected.
-
-   ```text
-   >>> verify(edited, scored)
-   False
-   ```
+walks through the bundled twelve-comment sample: lexicon scores, engagement
+weights, five themes, the contested battery topic, and a digest receipt that
+rejects a doctored weight even with its hash recomputed. Every value on it is
+output from this repository. Its source is
+[docs/explainer/index.html](https://github.com/HarperZ9/chorus/blob/main/docs/explainer/index.html).
 
 ## What you get
 
@@ -67,30 +108,30 @@ Install it, run it once, then use the main feature. Each command below is real, 
   carries a corpus-salience label, label-support metadata, its size, an
   engagement-and-sentiment weight, a sentiment split, a *controversy* score (how
   divided and how strongly felt), and the single highest-weight voice that
-  disagrees with the majority. Singleton and weak-support labels are named as
-  such in the digest instead of being presented as broad crowd themes. Theme item
+  disagrees with the majority. The digest marks singleton and weak-support labels,
+  so a narrow label never passes for a broad crowd theme. Theme item
   IDs stay in the output so callers can resolve labels back to the source links
   and provenance in their corpus.
 - **The contested topics, named.** A separate lens reports the aspects the corpus
-  is genuinely split on, measured across *every* comment that mentions a topic. It
+  is split on, measured across *every* comment that mentions a topic. It
   is immune to the lexical clustering that would otherwise file "the battery is
   amazing" and "the battery is terrible" under different themes and hide the fight.
   One-sided praise and neutral chatter are excluded; only real two-sided
   disagreement is surfaced.
-- **A receipt, not a vibe.** `--verify` re-derives the whole digest from the inputs
+- **A receipt for every digest.** `--verify` re-derives the whole digest from the inputs
   and confirms it. A tampered digest fails even if its own hash was recomputed to
   match. Sentiment is a *weight*, never a verdict.
 - **Honest nulls.** A missing engagement signal is recorded as absent, never
   counted as a zero. A too-thin corpus says so. The lexicon's limits (English-only,
   literal, no sarcasm) are stated in the digest itself.
 - **A daemon.** Point it at a watchlist and it re-synthesizes only when a corpus
-  actually changes, storing each receipted digest by its own hash.
+  changes, storing each receipted digest by its own hash.
 - **A source-change review gate.** Compare a current gather corpus against a
   reference corpus before reusing a prior synthesis or release note. The result
   reports added, removed, changed, unchanged, digest verification, a local digest
   outline, and typed source failure states. The optional public projection is
   safe by default as hashes and counts. Human-readable public ids, source names,
-  refs, and URLs require an operator-authored `--public-policy` sidecar; raw
+  refs, and URLs require a `--public-policy` sidecar you write; raw
   source row metadata cannot authorize public output. The projection omits raw
   source text, author names, local paths, private session content, and bulk
   comments. Source URLs appear there only through that public-policy sidecar.
@@ -99,12 +140,17 @@ Install it, run it once, then use the main feature. Each command below is real, 
 
 ## Release notes
 
-See [CHANGELOG.md](CHANGELOG.md). Version 0.3.0 adds `chorus decision` and MCP `chorus.decision` as a source-change review gate for deciding whether a prior synthesis or release note can reuse the same source observations, needs source review, or must hold for source repair. It does not decide whether a source claim is true, complete, or ready for publication. Version 0.2.0 writes `chorus-lens/3` receipts with label-support metadata while preserving historical `chorus-lens/2` verification through an explicit legacy path. v2 receipts do not bind the current v3-only label terms or `label_quality` fields.
+[CHANGELOG.md](https://github.com/HarperZ9/chorus/blob/main/CHANGELOG.md) lists
+every release. Version 0.3.1 reads Gather feed entries as discourse. Version
+0.3.0 added `chorus decision`, a review gate that reports whether the sources
+behind an earlier digest changed; it does not judge whether a source claim is
+true. Version 0.2.0 added theme-label support metadata to receipts, and
+`chorus-lens/2` receipts from earlier versions still verify.
 
 ## Run it
 
 ```bash
-pip install -e .
+python -m pip install chorus-discourse   # or, from a checkout: python -m pip install -e .
 
 chorus run examples/discourse-sample.json --verify   # try it on the bundled sample
 chorus run <corpus> --verify        # a corpus -> a verified discourse digest
@@ -130,11 +176,11 @@ chorus run examples/discourse-sample.json --verify
 python -m pytest
 ```
 
-If `chorus` is not on `PATH`, reinstall from the checkout with
-`python -m pip install -e .` and open a new shell. `chorus.status` and
+If `chorus` is not on `PATH`, reinstall with `python -m pip install chorus-discourse`
+and open a new shell. `chorus.status` and
 `chorus.doctor` are MCP tools exposed through `chorus mcp`; they are not separate
-CLI subcommands. Public source-change projections need an operator-authored
-`--public-policy` sidecar before source names, ids, refs, or URLs appear.
+CLI subcommands. Public source-change projections need a `--public-policy`
+sidecar you write before source names, ids, refs, or URLs appear.
 
 ![Eight stages of verifying a discourse digest: receipt, version, vocabulary, inputs, rescore, recluster, rehash, and verdict. The receipt supplies the parameters and hashes the original run recorded. The method version selects the verifier for that pipeline; unsupported versions fail instead of being guessed. The lexicon is hashed into the receipt, so editing the word list invalidates every digest that was built with the old one. The corpus hash is checked before any work is done. Then the stored sentiment is thrown away and every comment is re-scored from its own text, which is why fabricated sentiment cannot verify. Clustering and weighting re-run from the parameters the receipt recorded, not from the live defaults, so raising a default cannot silently break an already-versioned receipt. The digest body is rebuilt from that re-derivation and hashed. The verdict is one boolean with nothing taken on trust: a digest whose themes, weights or sentiment distribution do not follow from the inputs fails, even when its own stored hash was recomputed to match its tampered body. Three outcomes: verified, tampered, and no receipt.](docs/art/verify-lane.svg)
 
@@ -155,14 +201,14 @@ are kept distinct, on the record.
 ## Design
 
 The design and its two exposed defects-caught-in-review live in
-[docs/superpowers/specs](docs/superpowers/specs). Sentiment is coarse by
+[docs/superpowers/specs](https://github.com/HarperZ9/chorus/tree/main/docs/superpowers/specs). Sentiment is coarse by
 construction and the digest says so; clustering is lexical, not semantic. chorus
 tells you what it did and hands you the means to check it.
 
 ## License
 
 Chorus is free software under the GNU Affero General Public License, version 3
-only (AGPL-3.0-only). See [LICENSE](LICENSE) and [NOTICE](NOTICE).
+only (AGPL-3.0-only). See [LICENSE](https://github.com/HarperZ9/chorus/blob/main/LICENSE) and [NOTICE](https://github.com/HarperZ9/chorus/blob/main/NOTICE).
 
 Anyone may use, study, change and share it. If you distribute a changed copy, or
 run one as a service that people use over a network, you must offer them its
@@ -173,4 +219,4 @@ and each converts to MIT two years after its release.
 
 ---
 
-Built by **[Zain Dana Harper](https://harperz9.github.io)** in Seattle: evidence-first tools that leave a re-checkable artifact behind. The full workbench is at [Project Telos](https://harperz9.github.io).
+Built by **[Zain Dana Harper](https://harperz9.github.io)** in Seattle: evidence-first tools that leave a re-checkable artifact behind. Other tools by the same author are listed at [harperz9.github.io](https://harperz9.github.io).
