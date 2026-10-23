@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "chorus-discourse"
 version = "0.3.1"
-description = "Turn a comment corpus into a ranked, re-checkable discourse digest."
+description = "Read a comment section: ranked themes, strength of feeling, split topics, and a receipt anyone can re-run."
 readme = "README.md"
 requires-python = ">=3.10"
 license = "AGPL-3.0-only"

@@ -1,4 +1,4 @@
-"""chorus — a discourse-synthesis satellite for gather.
+"""chorus: read a comment section as ranked, re-checkable themes.
 
 Turns a corpus of comments and threads into a weighted, clustered, re-checkable
 reading of the discourse. Sentiment is a weight and a signal here, never an
