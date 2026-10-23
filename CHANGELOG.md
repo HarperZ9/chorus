@@ -1,10 +1,13 @@
 # Changelog
 
-## Unreleased
+## 0.3.2 - 2026-10-22
 
 - Licence: future releases are AGPL-3.0-only. Published releases up to 0.3.1
   keep their FSL-1.1-MIT terms and still convert to MIT two years after each
   release.
+- Rewrites the README opening: what Chorus reports, install and first run from
+  PyPI, a comparison with similar tools, and its limits. The PyPI summary
+  changes to match.
 
 ## 0.3.1 - 2026-09-22
 

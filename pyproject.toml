@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "chorus-discourse"
-version = "0.3.1"
+version = "0.3.2"
 description = "Read a comment section: ranked themes, strength of feeling, split topics, and a receipt anyone can re-run."
 readme = "README.md"
 requires-python = ">=3.10"
