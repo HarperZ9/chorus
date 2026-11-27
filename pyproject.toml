@@ -10,7 +10,7 @@ readme = "README.md"
 requires-python = ">=3.10"
 license = "AGPL-3.0-only"
 license-files = ["LICENSE", "NOTICE"]
-authors = [{ name = "Zain Dana Harper", email = "zaindharper@gmail.com" }]
+authors = [{ name = "Zain Dana Harper" }]
 keywords = ["discourse", "comments", "clustering", "nlp", "research"]
 classifiers = [
   "Development Status :: 3 - Alpha",
