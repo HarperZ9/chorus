@@ -1,0 +1,28 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it using these metadata."
+type: software
+title: "chorus"
+abstract: "Reads a comment section and reports its themes, how strongly people feel, and the topics they split on, with a receipt anyone can re-run. Local, no model."
+version: "0.3.2"
+date-released: 2026-11-27
+authors:
+  - family-names: "Harper"
+    given-names: "Zain Dana"
+    orcid: "https://orcid.org/0009-0001-7175-5393"
+repository-code: "https://github.com/HarperZ9/chorus"
+url: "https://harperz9.github.io"
+license: AGPL-3.0-only
+license-url: "https://github.com/HarperZ9/chorus/blob/main/LICENSE"
+keywords:
+  - agpl
+  - cli
+  - comment-analysis
+  - discourse-analysis
+  - local-first
+  - mcp
+  - nlp
+  - open-science
+  - provenance
+  - python
+  - receipts
+  - reproducibility
