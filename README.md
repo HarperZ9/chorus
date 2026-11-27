@@ -22,6 +22,8 @@ comment threads and need a summary they can show their working for.
 
 Python 3.10 or newer. Chorus has no third-party dependencies.
 
+mcp-name: io.github.harperz9/chorus
+
 ```bash
 python -m pip install chorus-discourse
 curl -LO https://raw.githubusercontent.com/HarperZ9/chorus/main/examples/discourse-sample.json
